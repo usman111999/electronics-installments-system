@@ -3,101 +3,217 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { api } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import StatCard from '../components/StatCard';
 import Modal from '../components/Modal';
-import DeviceMap from '../components/DeviceMap';
+import DeviceCard from '../components/DeviceCard';
+import EnrollDeviceModal from '../components/EnrollDeviceModal';
 import { useAuth } from '../context/AuthContext';
 
 dayjs.extend(relativeTime);
 
-const ONLINE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
+const ONLINE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2h
 
-function StatusDot({ device }) {
-  let color = 'bg-slate-300';
-  let label = 'unknown';
-  if (device.last_seen_at) {
-    const age = Date.now() - new Date(device.last_seen_at).getTime();
-    if (age < ONLINE_THRESHOLD_MS) { color = 'bg-emerald-500'; label = 'online'; }
-    else if (age < 7 * 24 * 60 * 60 * 1000) { color = 'bg-amber-500'; label = 'stale'; }
-    else { color = 'bg-red-500'; label = 'offline'; }
-  } else if (device.status === 'pending') {
-    color = 'bg-slate-300'; label = 'pending';
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs">
-      <span className={`w-2 h-2 rounded-full ${color}`} />
-      {label}
-    </span>
-  );
+const STATUS_CHIPS = [
+  { value: '',        label: 'All' },
+  { value: 'active',  label: 'Active' },
+  { value: 'locked',  label: 'Locked' },
+  { value: 'offline', label: 'Offline' },
+  { value: 'pending', label: 'Pending' },
+];
+
+/** Derive a single display status — locked is treated as its own status, then we
+ *  fall back to the device's own status field. Used for chip filtering. */
+function deriveStatus(d) {
+  if (d?.orders?.device_locked) return 'locked';
+  if (d?.status) return d.status;
+  return 'unknown';
+}
+
+function StatusPill({ device }) {
+  const s = deriveStatus(device);
+  if (s === 'locked')  return <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" /><span className="badge-red">Locked</span></span>;
+  if (s === 'active')  return <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /><span className="badge-green">Active</span></span>;
+  if (s === 'pending') return <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-400" /><span className="badge-gray">Pending</span></span>;
+  if (s === 'offline') return <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500" /><span className="badge-yellow">Offline</span></span>;
+  return <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300" /><span className="badge-gray">{s}</span></span>;
 }
 
 export default function Devices() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [list, setList] = useState([]);
   const [branches, setBranches] = useState([]);
-  const [filter, setFilter] = useState({ branch_id: '', status: '' });
-  const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState(null);
-  const [history, setHistory] = useState({ events: [], commands: [] });
-  const [historyPoints, setHistoryPoints] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState({ branch_id: '', status: '', search: '' });
+  const [searchInput, setSearchInput] = useState('');
+
+  // detail modal
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailOrder, setDetailOrder] = useState(null);
+
+  // enroll flow
+  const [enrollPickerOpen, setEnrollPickerOpen] = useState(false);
+  const [enrollOrders, setEnrollOrders] = useState([]);
+  const [pickedOrderId, setPickedOrderId] = useState('');
+  const [enrollModalOpen, setEnrollModalOpen] = useState(false);
+
+  // debounced search
+  useEffect(() => {
+    const t = setTimeout(() => setFilter(f => ({ ...f, search: searchInput.trim() })), 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // Branches — only fetched when user can pick (admin/super_admin); operators
+  // are auto-scoped server-side and don't see this dropdown.
+  useEffect(() => {
+    if (hasPermission('branches.view')) {
+      api.get('/branches').then(({ data }) => setBranches(data || [])).catch(() => {});
+    }
+  }, [hasPermission]);
 
   const load = async () => {
-    const params = {};
-    if (filter.branch_id) params.branch_id = filter.branch_id;
-    if (filter.status) params.status = filter.status;
-    const { data } = await api.get('/devices', { params });
-    setList(data || []);
+    setLoading(true);
+    try {
+      const params = {};
+      if (filter.branch_id) params.branch_id = filter.branch_id;
+      // Only forward simple statuses to the API; 'locked' is derived client-side.
+      if (filter.status && filter.status !== 'locked') params.status = filter.status;
+      const { data } = await api.get('/devices', { params });
+      setList(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.warn('devices load failed', e);
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
   };
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await api.get('/branches');
-      setBranches(data || []);
-    })();
-  }, []);
 
   useEffect(() => { load(); }, [filter.branch_id, filter.status]);
 
-  const openDetail = async (d) => {
-    setSelected(d);
-    setOpen(true);
-    setHistory({ events: [], commands: [] });
-    setHistoryPoints([]);
-    if (!d.imei) return;
-    try {
-      const [hist, locs] = await Promise.all([
-        api.get(`/devices/${d.imei}/events`),
-        api.get(`/devices/${d.imei}/locations`, { params: { from: dayjs().subtract(30, 'day').toISOString() } }),
-      ]);
-      setHistory(hist.data || { events: [], commands: [] });
-      setHistoryPoints(locs.data || []);
-    } catch {/* ignore */}
-  };
+  // Client-side search & locked filter
+  const filtered = useMemo(() => {
+    const q = (filter.search || '').toLowerCase();
+    return (list || []).filter(d => {
+      if (filter.status === 'locked' && !d?.orders?.device_locked) return false;
+      if (!q) return true;
+      const haystack = [
+        d.imei,
+        d.orders?.order_no,
+        d.orders?.customers?.customer_name,
+        d.orders?.customers?.account_no,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [list, filter.status, filter.search]);
 
   const counts = useMemo(() => {
-    const out = { total: list.length, active: 0, pending: 0, offline: 0, locked: 0 };
+    const out = { total: list.length, active: 0, locked: 0, offline: 0, pending: 0 };
     for (const d of list) {
-      if (d.status === 'active') out.active++;
-      else if (d.status === 'pending') out.pending++;
-      else if (d.status === 'offline') out.offline++;
       if (d.orders?.device_locked) out.locked++;
+      const age = d.last_seen_at ? (Date.now() - new Date(d.last_seen_at).getTime()) : Infinity;
+      if (d.status === 'active' && age < ONLINE_THRESHOLD_MS && !d.orders?.device_locked) out.active++;
+      else if (d.status === 'pending') out.pending++;
+      else if (d.status === 'offline' || (d.status === 'active' && age >= ONLINE_THRESHOLD_MS)) out.offline++;
     }
     return out;
   }, [list]);
 
+  // ---- actions ----------------------------------------------------------
+  const refresh = () => setFilter(f => ({ ...f })); // nudge re-fetch via effect
+
+  const onLock = async (d, e) => {
+    e?.stopPropagation();
+    if (!d.orders?.id) return alert('This device has no order — cannot lock.');
+    const reason = window.prompt(`Lock device for ${d.orders?.customers?.customer_name || d.imei}?\n\nReason (visible internally):`, '');
+    if (reason === null) return;
+    try {
+      const { data } = await api.post(`/orders/${d.orders.id}/lock`, { reason: reason || 'Operator initiated' });
+      if (data?.fcm?.ok || data?.fcm?.noop) alert('Lock command dispatched.');
+      else alert(`Lock recorded but FCM dispatch failed: ${data?.fcm?.error || 'unknown error'}. Customer phone may not have received it.`);
+    } catch (err) {
+      alert(`Lock failed: ${err?.response?.data?.error || err.message}`);
+    }
+    refresh();
+  };
+
+  const onUnlock = async (d, e) => {
+    e?.stopPropagation();
+    if (!d.orders?.id) return alert('This device has no order — cannot unlock.');
+    if (!window.confirm(`Unlock device for ${d.orders?.customers?.customer_name || d.imei}?`)) return;
+    try {
+      const { data } = await api.post(`/orders/${d.orders.id}/unlock`, { reason: 'Operator initiated' });
+      if (data?.fcm?.ok || data?.fcm?.noop) alert('Unlock command dispatched.');
+      else alert(`Unlock recorded but FCM dispatch failed: ${data?.fcm?.error || 'unknown error'}.`);
+    } catch (err) {
+      alert(`Unlock failed: ${err?.response?.data?.error || err.message}`);
+    }
+    refresh();
+  };
+
+  const onLocate = async (d, e) => {
+    e?.stopPropagation();
+    if (!d.imei) return alert('Device has no IMEI yet — finish enrollment first.');
+    try {
+      await api.post(`/devices/${d.imei}/locate`);
+      alert('Locate request sent. Phone will reply on next heartbeat (~1 min on Wi-Fi).');
+    } catch (err) {
+      alert(`Locate failed: ${err?.response?.data?.error || err.message}`);
+    }
+  };
+
+  const openDetail = (d) => {
+    if (!d.orders) return;
+    setDetailOrder(d.orders);
+    setDetailOpen(true);
+  };
+
+  // ---- enroll flow ------------------------------------------------------
+  const openEnrollPicker = async () => {
+    setPickedOrderId('');
+    setEnrollPickerOpen(true);
+    try {
+      const { data } = await api.get('/orders');
+      const unenrolled = (data || []).filter(o => !o.device_imei);
+      setEnrollOrders(unenrolled);
+    } catch (e) {
+      setEnrollOrders([]);
+    }
+  };
+
+  const confirmEnrollPick = () => {
+    if (!pickedOrderId) return alert('Pick an order first.');
+    setEnrollPickerOpen(false);
+    setEnrollModalOpen(true);
+  };
+
   return (
     <div className="p-6">
-      <PageHeader title="Devices" subtitle="All enrolled customer devices across branches" />
+      <PageHeader
+        title="Devices"
+        subtitle="All enrolled customer devices — lock, unlock, locate"
+        actions={
+          hasPermission('devices.enroll') ? (
+            <button className="btn-primary" onClick={openEnrollPicker}>+ Enroll device</button>
+          ) : null
+        }
+      />
 
+      {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-        <div className="card !p-3"><div className="text-xs text-slate-500">Total</div><div className="text-2xl font-bold">{counts.total}</div></div>
-        <div className="card !p-3"><div className="text-xs text-slate-500">Active</div><div className="text-2xl font-bold text-emerald-600">{counts.active}</div></div>
-        <div className="card !p-3"><div className="text-xs text-slate-500">Pending</div><div className="text-2xl font-bold text-slate-600">{counts.pending}</div></div>
-        <div className="card !p-3"><div className="text-xs text-slate-500">Offline</div><div className="text-2xl font-bold text-amber-600">{counts.offline}</div></div>
-        <div className="card !p-3"><div className="text-xs text-slate-500">Locked</div><div className="text-2xl font-bold text-red-600">{counts.locked}</div></div>
+        <StatCard label="Total" value={counts.total} accent="brand"
+          icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="5" y="2" width="14" height="20" rx="2"/></svg>} />
+        <StatCard label="Active" value={counts.active} accent="green"
+          icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>} />
+        <StatCard label="Locked" value={counts.locked} accent="red"
+          icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>} />
+        <StatCard label="Offline" value={counts.offline} accent="yellow"
+          icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>} />
+        <StatCard label="Pending" value={counts.pending} accent="blue"
+          icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>} />
       </div>
 
+      {/* Toolbar */}
       <div className="card mb-4 flex flex-wrap gap-3 items-end">
-        {user?.role === 'admin' && (
+        {hasPermission('branches.view') && (
           <div>
             <label className="label">Branch</label>
             <select className="input" value={filter.branch_id}
@@ -107,119 +223,131 @@ export default function Devices() {
             </select>
           </div>
         )}
-        <div>
-          <label className="label">Status</label>
-          <select className="input" value={filter.status}
-            onChange={e => setFilter(f => ({ ...f, status: e.target.value }))}>
-            <option value="">All</option>
-            <option value="active">Active</option>
-            <option value="pending">Pending</option>
-            <option value="offline">Offline</option>
-            <option value="lost">Lost</option>
-          </select>
+        <div className="flex-1 min-w-[240px]">
+          <label className="label">Search (IMEI, customer, order #)</label>
+          <input className="input" placeholder="Search…"
+            value={searchInput} onChange={e => setSearchInput(e.target.value)} />
+        </div>
+        <div className="basis-full flex gap-1.5 flex-wrap pt-1">
+          {STATUS_CHIPS.map(chip => (
+            <button key={chip.value || 'all'} type="button"
+              onClick={() => setFilter(f => ({ ...f, status: chip.value }))}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                filter.status === chip.value
+                  ? 'bg-brand-600 text-white border-brand-600'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}>
+              {chip.label}
+            </button>
+          ))}
         </div>
       </div>
 
+      {/* Table */}
       <div className="card overflow-x-auto p-0">
         <table className="table-base">
-          <thead><tr>
-            <th>Customer</th><th>Order</th><th>Branch</th><th>IMEI</th>
-            <th>Last Seen</th><th>Status</th><th>Lock</th><th>Battery</th><th></th>
-          </tr></thead>
+          <thead>
+            <tr>
+              <th>IMEI</th>
+              <th>Customer / Order</th>
+              <th>Branch</th>
+              <th>Status</th>
+              <th>Last Seen</th>
+              <th>Battery</th>
+              <th className="text-right pr-4">Actions</th>
+            </tr>
+          </thead>
           <tbody>
-            {list.map(d => (
-              <tr key={d.id} className="cursor-pointer" onClick={() => openDetail(d)}>
-                <td className="font-medium">{d.orders?.customers?.customer_name || '—'}</td>
-                <td className="text-xs">{d.orders?.order_no || '—'}</td>
-                <td>{d.branches?.name || '—'}</td>
-                <td className="font-mono text-xs">{d.imei || <span className="text-slate-400">pending</span>}</td>
-                <td className="text-xs">{d.last_seen_at ? dayjs(d.last_seen_at).fromNow() : '—'}</td>
-                <td><StatusDot device={d} /></td>
-                <td>
-                  {d.orders?.device_locked
-                    ? <span className="badge-red">Locked</span>
-                    : <span className="badge-green">Unlocked</span>}
-                </td>
-                <td className="text-xs">{d.last_battery != null ? `${d.last_battery}%` : '—'}</td>
-                <td><button className="text-brand-600 text-sm">View</button></td>
-              </tr>
-            ))}
-            {list.length === 0 && (
-              <tr><td colSpan="9" className="text-center text-slate-400 py-8">No devices enrolled yet.</td></tr>
+            {loading && <tr><td colSpan="7" className="text-center text-slate-400 py-8">Loading…</td></tr>}
+            {!loading && filtered.map(d => {
+              const locked = !!d.orders?.device_locked;
+              const isPending = d.status === 'pending';
+              return (
+                <tr key={d.id} className="cursor-pointer" onClick={() => openDetail(d)}>
+                  <td className="font-mono text-xs">{d.imei || <span className="text-slate-400">pending</span>}</td>
+                  <td>
+                    <div className="font-medium text-slate-900">{d.orders?.customers?.customer_name || '—'}</div>
+                    <div className="text-xs text-slate-500">{d.orders?.order_no || ''}{d.orders?.customers?.account_no ? ` · #${d.orders.customers.account_no}` : ''}</div>
+                  </td>
+                  <td>{d.branches?.name || '—'}</td>
+                  <td><StatusPill device={d} /></td>
+                  <td className="text-xs text-slate-600">{d.last_seen_at ? dayjs(d.last_seen_at).fromNow() : '—'}</td>
+                  <td className="text-xs">{d.last_battery != null ? `${d.last_battery}%` : '—'}</td>
+                  <td className="whitespace-nowrap text-right pr-4">
+                    <div className="inline-flex gap-3" onClick={e => e.stopPropagation()}>
+                      {hasPermission('devices.lock') && !locked && !isPending && (
+                        <button onClick={(e) => onLock(d, e)} className="text-red-600 text-sm hover:underline">Lock</button>
+                      )}
+                      {hasPermission('devices.unlock') && locked && (
+                        <button onClick={(e) => onUnlock(d, e)} className="text-emerald-600 text-sm hover:underline">Unlock</button>
+                      )}
+                      {hasPermission('devices.locate') && d.imei && (
+                        <button onClick={(e) => onLocate(d, e)} className="text-slate-600 text-sm hover:underline">Locate</button>
+                      )}
+                      <button onClick={(e) => { e.stopPropagation(); openDetail(d); }} className="text-brand-600 text-sm hover:underline">View</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {!loading && filtered.length === 0 && (
+              <tr><td colSpan="7" className="text-center text-slate-400 py-10">
+                {list.length === 0 ? 'No devices enrolled yet.' : 'No devices match these filters.'}
+              </td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)}
-        title={selected ? `Device — ${selected.orders?.customers?.customer_name || selected.imei}` : 'Device'} size="xl">
-        {selected && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              <div><div className="text-xs text-slate-500">IMEI</div><div className="font-mono">{selected.imei || '—'}</div></div>
-              <div><div className="text-xs text-slate-500">Model</div><div>{selected.device_model || '—'}</div></div>
-              <div><div className="text-xs text-slate-500">Android</div><div>{selected.android_version || '—'}</div></div>
-              <div><div className="text-xs text-slate-500">SIM</div><div className="font-mono text-xs">{selected.current_sim_serial || '—'}</div></div>
-              <div><div className="text-xs text-slate-500">Battery</div><div>{selected.last_battery != null ? `${selected.last_battery}%` : '—'}</div></div>
-              <div><div className="text-xs text-slate-500">Network</div><div className="capitalize">{selected.last_network || '—'}</div></div>
-              <div><div className="text-xs text-slate-500">Last Seen</div><div>{selected.last_seen_at ? dayjs(selected.last_seen_at).fromNow() : '—'}</div></div>
-              <div><div className="text-xs text-slate-500">Status</div><div><StatusDot device={selected} /></div></div>
-            </div>
-
-            <div className="rounded-lg overflow-hidden border border-slate-200">
-              <DeviceMap height={300} points={historyPoints}
-                latestPoint={historyPoints.length ? historyPoints[historyPoints.length - 1] : null} />
-            </div>
-            <div className="text-xs text-slate-500">{historyPoints.length} location points in last 30 days</div>
-
-            <div>
-              <h4 className="font-semibold text-sm mb-2">Lock event history</h4>
-              <div className="overflow-x-auto rounded border">
-                <table className="table-base">
-                  <thead><tr><th>When</th><th>Action</th><th>By</th><th>Reason</th><th>Result</th></tr></thead>
-                  <tbody>
-                    {(history.events || []).map(ev => (
-                      <tr key={ev.id}>
-                        <td className="text-xs">{dayjs(ev.created_at).format('DD MMM YYYY HH:mm')}</td>
-                        <td><span className={ev.action === 'lock' ? 'badge-red' : 'badge-green'}>{ev.action}</span></td>
-                        <td className="text-xs">{ev.profiles?.full_name || 'system'}</td>
-                        <td className="text-xs">{ev.reason || '—'}</td>
-                        <td className="text-xs">{ev.success ? 'ok' : (ev.error_message || 'failed')}</td>
-                      </tr>
-                    ))}
-                    {(history.events || []).length === 0 && (
-                      <tr><td colSpan="5" className="text-center text-slate-400 py-4">No lock events yet.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="font-semibold text-sm mb-2">Recent commands</h4>
-              <div className="overflow-x-auto rounded border">
-                <table className="table-base">
-                  <thead><tr><th>Issued</th><th>Action</th><th>Status</th><th>Acked</th><th>Reason</th></tr></thead>
-                  <tbody>
-                    {(history.commands || []).map(c => (
-                      <tr key={c.id}>
-                        <td className="text-xs">{dayjs(c.issued_at).format('DD MMM HH:mm')}</td>
-                        <td><span className="badge-gray">{c.action}</span></td>
-                        <td className="text-xs">{c.status}</td>
-                        <td className="text-xs">{c.acked_at ? dayjs(c.acked_at).fromNow() : '—'}</td>
-                        <td className="text-xs">{c.reason || '—'}</td>
-                      </tr>
-                    ))}
-                    {(history.commands || []).length === 0 && (
-                      <tr><td colSpan="5" className="text-center text-slate-400 py-4">No commands issued.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+      {/* Detail modal — reuses the existing DeviceCard so we get the full
+          lock / unlock / locate flow + map + history in one place. */}
+      <Modal
+        open={detailOpen}
+        onClose={() => { setDetailOpen(false); refresh(); }}
+        size="xl"
+        title={detailOrder ? `Device — ${detailOrder.customers?.customer_name || detailOrder.device_imei}` : 'Device'}
+      >
+        {detailOrder && <DeviceCard order={detailOrder} onChanged={refresh} />}
       </Modal>
+
+      {/* Enroll picker — small modal to choose an order, then opens the full QR modal. */}
+      <Modal open={enrollPickerOpen} onClose={() => setEnrollPickerOpen(false)} title="Enroll a device" size="md">
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">
+            Pick the order whose device you want to enroll. Only orders that don't already have a phone attached are listed.
+          </p>
+          {enrollOrders.length === 0 ? (
+            <div className="text-sm text-slate-500 bg-slate-50 rounded-lg px-4 py-6 text-center">
+              No orders are awaiting enrollment. Create an order first, then come back here.
+            </div>
+          ) : (
+            <div>
+              <label className="label">Order</label>
+              <select className="input" value={pickedOrderId} onChange={e => setPickedOrderId(e.target.value)}>
+                <option value="">Choose an order…</option>
+                {enrollOrders.map(o => (
+                  <option key={o.id} value={o.id}>
+                    {o.order_no} — {o.customers?.customer_name || 'Customer'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <button className="btn-secondary" onClick={() => setEnrollPickerOpen(false)}>Cancel</button>
+            <button className="btn-primary" disabled={!pickedOrderId} onClick={confirmEnrollPick}>
+              Continue
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <EnrollDeviceModal
+        open={enrollModalOpen}
+        onClose={() => setEnrollModalOpen(false)}
+        orderId={pickedOrderId}
+        onEnrolled={() => { setEnrollModalOpen(false); refresh(); }}
+      />
     </div>
   );
 }
