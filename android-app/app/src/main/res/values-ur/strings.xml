@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ای آئی ایس ڈیوائس لاک</string>
+
+    <string name="enroll_in_progress">ڈیوائس رجسٹر ہو رہی ہے…</string>
+    <string name="enroll_success">ڈیوائس کامیابی سے رجسٹر ہو گئی</string>
+    <string name="enroll_failed">رجسٹریشن ناکام: %1$s</string>
+    <string name="enroll_call_branch">مدد کے لیے اپنی برانچ کو کال کریں: %1$s</string>
+
+    <string name="main_status_label">حالت</string>
+    <string name="main_status_active">فعال</string>
+    <string name="main_imei_label">آئی ایم ای آئی</string>
+    <string name="main_branch_label">برانچ</string>
+    <string name="main_last_heartbeat">آخری چیک ان</string>
+    <string name="main_help_intro">قسط ادا کرنے یا ڈیوائس بحال کرنے کے لیے اپنی برانچ سے رابطہ کریں۔</string>
+
+    <string name="lock_title">اپنی قسط ادا کریں</string>
+    <string name="lock_subtitle">آپ کی قسط بقایا ہے، اس لیے آپ کی ڈیوائس لاک کر دی گئی ہے۔</string>
+    <string name="lock_default_message">ڈیوائس کھولنے کے لیے اپنی قسط ادا کریں۔</string>
+    <string name="lock_call_branch">برانچ کو کال کریں</string>
+    <string name="lock_emergency_call">ایمرجنسی کال</string>
+    <string name="lock_last_attempt">آخری ان لاک کوشش: %1$s</string>
+    <string name="lock_never">کبھی نہیں</string>
+    <string name="lock_minutes_ago">%1$d منٹ پہلے</string>
+
+    <string name="error_no_secret">ڈیوائس رجسٹر نہیں ہے۔</string>
+    <string name="error_bad_hmac">کمانڈ کا دستخط غلط ہے؛ مسترد کر دی گئی۔</string>
+
+    <string name="notif_channel_lock">ڈیوائس لاک</string>
+    <string name="notif_channel_lock_desc">لاک اسکرین فعال رکھنے کے لیے۔</string>
+    <string name="notif_lock_title">ڈیوائس لاک ہے</string>
+    <string name="notif_lock_text">آپ کی ڈیوائس ای آئی ایس نے لاک کر دی ہے۔</string>
+    <string name="notif_channel_status">ڈیوائس اسٹیٹس</string>
+    <string name="notif_channel_status_desc">پس منظر میں ڈیوائس چیک ان۔</string>
+</resources>

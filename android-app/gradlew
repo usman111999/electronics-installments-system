@@ -1,0 +1,23 @@
+#!/bin/sh
+
+#
+# Copyright © 2015-2021 the original authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      https://www.apache.org/licenses/LICENSE-2.0
+#
+
+##############################################################################
+#
+#   Gradle start up script for POSIX-compatible shells.
+#
+#   IMPORTANT: This is a minimal wrapper script. To regenerate the canonical
+#   wrapper run `gradle wrapper` inside the project root.
+#
+##############################################################################
+
+APP_HOME=$(cd "$(dirname "$0")" >/dev/null && pwd)
+exec gradle --project-dir "$APP_HOME" "$@"

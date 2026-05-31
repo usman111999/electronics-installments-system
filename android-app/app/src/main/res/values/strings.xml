@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EIS Device Lock</string>
+
+    <!-- Enrollment -->
+    <string name="enroll_in_progress">Enrolling device…</string>
+    <string name="enroll_success">Device enrolled successfully</string>
+    <string name="enroll_failed">Enrollment failed: %1$s</string>
+    <string name="enroll_call_branch">If you need help, call your branch: %1$s</string>
+
+    <!-- Main -->
+    <string name="main_status_label">Status</string>
+    <string name="main_status_active">Active</string>
+    <string name="main_imei_label">IMEI</string>
+    <string name="main_branch_label">Branch</string>
+    <string name="main_last_heartbeat">Last check-in</string>
+    <string name="main_help_intro">If you need help paying or recovering your device, contact your branch.</string>
+
+    <!-- Lock screen -->
+    <string name="lock_title">Pay your installment</string>
+    <string name="lock_subtitle">Your device has been locked because an installment is overdue.</string>
+    <string name="lock_default_message">Pay your installment to unlock your device.</string>
+    <string name="lock_call_branch">Call your branch</string>
+    <string name="lock_emergency_call">Emergency call</string>
+    <string name="lock_last_attempt">Last unlock attempt: %1$s</string>
+    <string name="lock_never">never</string>
+    <string name="lock_minutes_ago">%1$d minutes ago</string>
+
+    <!-- Errors -->
+    <string name="error_no_secret">Device is not enrolled.</string>
+    <string name="error_bad_hmac">Command signature invalid; rejected.</string>
+
+    <!-- Notifications -->
+    <string name="notif_channel_lock">Device Lock</string>
+    <string name="notif_channel_lock_desc">Used to keep the lock screen active.</string>
+    <string name="notif_lock_title">Device locked</string>
+    <string name="notif_lock_text">Your device has been locked by EIS.</string>
+    <string name="notif_channel_status">Device Status</string>
+    <string name="notif_channel_status_desc">Background device check-in.</string>
+</resources>

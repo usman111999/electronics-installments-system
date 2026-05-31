@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Device-Owner / Device-Admin policy declaration.
+  Required for the app to be enrolled as a Device Owner and to apply
+  the lock-screen, force-lock and storage-encryption policies described
+  in the protocol spec.
+-->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android"
+    android:visible="true">
+    <uses-policies>
+        <limit-password />
+        <watch-login />
+        <reset-password />
+        <force-lock />
+        <wipe-data />
+        <expire-password />
+        <encrypted-storage />
+        <disable-camera />
+        <disable-keyguard-features />
+    </uses-policies>
+</device-admin>

@@ -1,0 +1,22 @@
+{
+  "_comment_": "Replace this file with the real google-services.json downloaded from your Firebase console. Rename to google-services.json. Package name MUST be com.eis.devicelock.",
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "your-firebase-project-id",
+    "storage_bucket": "your-firebase-project-id.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "android_client_info": { "package_name": "com.eis.devicelock" }
+      },
+      "oauth_client": [],
+      "api_key": [{ "current_key": "AIzaSy_REPLACE_ME" }],
+      "services": {
+        "appinvite_service": { "other_platform_oauth_client": [] }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

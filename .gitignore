@@ -1,0 +1,64 @@
+# ─── Secrets (NEVER commit) ─────────────────────────────────────────
+.env
+.env.local
+.env.production
+.env.development
+**/.env
+**/.env.local
+**/.env.production
+**/.env.development
+backend/firebase-service-account.json
+backend/firebase-*.json
+**/google-services.json
+**/*.keystore
+**/*.jks
+
+# ─── Node / npm ─────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+**/package-lock.json
+
+# ─── Build outputs ──────────────────────────────────────────────────
+dist/
+build/
+**/dist/
+**/build/
+.vite/
+**/.vite/
+
+# ─── Test / coverage ────────────────────────────────────────────────
+coverage/
+.nyc_output/
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
+e2e/.last-run.json
+playwright/.cache/
+**/test-results/
+
+# ─── Android (build artifacts) ──────────────────────────────────────
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+android-app/local.properties
+android-app/captures/
+android-app/.idea/
+android-app/*.iml
+android-app/**/*.iml
+
+# ─── OS / Editor ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Logs ───────────────────────────────────────────────────────────
+*.log
+logs/

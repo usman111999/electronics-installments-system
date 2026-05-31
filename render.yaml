@@ -1,0 +1,86 @@
+# Render Blueprint — one-click deploy for both backend and frontend.
+#
+# Usage (5 minutes total):
+#   1. Push this repo to GitHub.
+#   2. Render Dashboard → New + → Blueprint → connect repo.
+#   3. Render reads this file, provisions both services, asks you to fill in
+#      the env-var values marked `sync: false` below. Paste them and deploy.
+#
+# After deploy you must also:
+#   • Set FRONTEND_URL on the backend to the static site's URL Render assigns.
+#   • Add the static site's URL to Supabase Dashboard → Auth → URL Configuration.
+#   • Set up UptimeRobot to ping the backend /api/health every 5 minutes
+#     (free tier sleeps after 15 min idle, which kills the cron scheduler).
+#     See docs/RENDER_DEPLOYMENT.md.
+
+services:
+  # ─── Backend (Express) ──────────────────────────────────────────────────
+  - type: web
+    name: eis-backend
+    runtime: node
+    plan: free               # change to "starter" ($7/mo) to skip cold starts entirely
+    region: singapore        # closest to Pakistan; change if needed
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: DEVICE_LOCK_PROVIDER
+        value: fcm
+      - key: WHATSAPP_PROVIDER
+        value: none
+      # ─ Secrets — Render will prompt for these on first deploy ─────────
+      - key: SUPABASE_URL
+        sync: false           # paste: https://koldxkjvbifsszuhjrll.supabase.co
+      - key: SUPABASE_ANON_KEY
+        sync: false           # paste: the anon (publishable) JWT
+      - key: SUPABASE_SERVICE_KEY
+        sync: false           # paste: the service_role JWT (keep secret!)
+      - key: JWT_SECRET
+        generateValue: true   # Render auto-generates a random secret
+      - key: FCM_PROJECT_ID
+        value: electronics-installments
+      - key: FCM_SERVICE_ACCOUNT_JSON
+        sync: false           # paste: the entire firebase-service-account.json contents
+      - key: FRONTEND_URL
+        sync: false           # paste after frontend deploys (e.g. https://eis-frontend.onrender.com)
+      - key: PUBLIC_API_BASE_URL
+        sync: false           # paste this service's own URL after deploy (e.g. https://eis-backend.onrender.com). /api suffix optional — the backend normalises either way.
+      # ─ Android Setup-Wizard QR provisioning (set after first APK release) ─
+      - key: ANDROID_APK_DOWNLOAD_URL
+        sync: false           # public URL of the signed app-release.apk on GitHub Releases (or any HTTPS host). Required so the QR code can drive Device Owner install.
+      - key: ANDROID_APK_SIGNATURE_CHECKSUM
+        sync: false           # base64-url-no-padding sha256 of the APK signing cert. See android-app/PROVISIONING_QR_FORMAT.md for the keytool command that prints it.
+      - key: SCHEDULER_TZ
+        value: Asia/Karachi   # cron timezone for reminders + auto-lock sweeps
+      - key: SUPABASE_ACCESS_TOKEN
+        sync: false           # optional — only needed if you re-run npm run db:apply
+
+  # ─── Frontend (React/Vite static site) ──────────────────────────────────
+  - type: web
+    name: eis-frontend
+    runtime: static
+    plan: free                # static sites never sleep, no cold-start concern
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    # React Router fallback so deep-links like /super-admin/admins work.
+    # public/_redirects also provides this; the route rule below is the
+    # belt-and-braces version that lives in the dashboard.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false           # paste backend URL + /api (e.g. https://eis-backend.onrender.com/api)
+      - key: VITE_SUPABASE_URL
+        sync: false           # paste: https://koldxkjvbifsszuhjrll.supabase.co
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false           # paste: the anon JWT
