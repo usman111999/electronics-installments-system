@@ -89,7 +89,7 @@ export default function Inventory() {
                 {products.map(p => <option key={p.id} value={p.id}>{p.name} {p.model && `· ${p.model}`}</option>)}
               </select>
             </div>
-            <div><label className="label">Serial No.</label><input className="input" value={form.serial_no || ''} onChange={e => setForm(f => ({ ...f, serial_no: e.target.value }))}/></div>
+            <div><label className="label">Serial / IMEI No. <span className="font-normal text-slate-400">(optional, recommended)</span></label><input className="input" placeholder="helps track each unit" value={form.serial_no || ''} onChange={e => setForm(f => ({ ...f, serial_no: e.target.value }))}/></div>
             <div><label className="label">Cost Price</label><input type="number" step="0.01" className="input" value={form.cost_price || ''} onChange={e => setForm(f => ({ ...f, cost_price: e.target.value }))}/></div>
             {user?.role === 'admin' && (
               <div><label className="label">Branch *</label>
@@ -99,12 +99,13 @@ export default function Inventory() {
                 </select>
               </div>
             )}
-            <div><label className="label">Status</label>
+            <div><label className="label">Status <span className="font-normal text-slate-400">(when adding)</span></label>
               <select className="input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
                 <option value="in_stock">In Stock</option>
                 <option value="reserved">Reserved</option>
                 <option value="damaged">Damaged</option>
               </select>
+              <p className="text-xs text-slate-500 mt-1">Changes to “Sold” automatically when used in an order.</p>
             </div>
             <div className="col-span-2"><label className="label">Notes</label><textarea className="input" value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}/></div>
           </div>

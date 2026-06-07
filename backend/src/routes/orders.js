@@ -65,7 +65,8 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', requirePermission('orders.create'), async (req, res) => {
   const b = req.body || {};
-  const branch_id = req.user.role === 'admin' ? (b.branch_id || req.user.branch_id) : req.user.branch_id;
+  const isManager = req.user.role === 'admin' || req.user.role === 'super_admin';
+  const branch_id = isManager ? (b.branch_id || req.user.branch_id) : req.user.branch_id;
 
   if (!branch_id) return res.status(400).json({ error: 'branch_id required' });
   if (!b.customer_id) return res.status(400).json({ error: 'customer_id required' });
@@ -108,6 +109,11 @@ router.post('/', requirePermission('orders.create'), async (req, res) => {
       .from('inventory').select('serial_no').eq('id', b.inventory_id).single();
     if (inv) productSnap.serial = inv.serial_no;
   }
+  // Allow free-text overrides so any electronics item can be financed even when
+  // it isn't in the catalog, and so the operator can refine the model/serial.
+  if (b.product_name_snapshot) productSnap.name = b.product_name_snapshot;
+  if (b.product_model_snapshot) productSnap.model = b.product_model_snapshot;
+  if (b.product_serial_snapshot) productSnap.serial = b.product_serial_snapshot;
 
   const order_no = b.order_no || genOrderNo();
   const order_date = b.order_date || dayjs().format('YYYY-MM-DD');
@@ -122,6 +128,7 @@ router.post('/', requirePermission('orders.create'), async (req, res) => {
     product_name_snapshot: productSnap.name,
     product_model_snapshot: productSnap.model,
     product_serial_snapshot: productSnap.serial,
+    accessories: b.accessories || null,
     order_date,
     total_price: b.total_price,
     advance_payment: b.advance_payment || 0,
@@ -143,30 +150,25 @@ router.post('/', requirePermission('orders.create'), async (req, res) => {
     return res.status(400).json({ error: orderErr.message });
   }
 
-  const installments = [];
+  // Rolling installment model: create only the FIRST invoice now. The next
+  // installment is generated when the current one is fully paid (see
+  // installments POST /:id/pay). This keeps the customer on a single active
+  // invoice at a time instead of a pre-built full-year schedule.
   const totalRemainingToPay = Number(b.total_price) - Number(b.advance_payment || 0) - Number(b.discount || 0);
-  let runningBalance = totalRemainingToPay;
   const orderStart = dayjs(order_date);
+  const firstAmt = Math.min(Number(b.installment_amount), Math.max(0, totalRemainingToPay));
 
-  for (let i = 1; i <= Number(b.total_installments); i++) {
-    const dueDate = clampDueDate(orderStart, i, due_day);
-    const preBal = runningBalance;
-    const amt = Number(b.installment_amount);
-    runningBalance = Math.max(0, runningBalance - amt);
-
-    installments.push({
+  if (totalRemainingToPay > 0 && Number(b.total_installments) > 0) {
+    await supabaseAdmin.from('installments').insert({
       order_id: order.id,
-      installment_no: i,
-      due_date: dueDate.format('YYYY-MM-DD'),
-      amount_due: amt,
-      pre_balance: preBal,
-      balance: runningBalance,
+      installment_no: 1,
+      due_date: clampDueDate(orderStart, 1, due_day).format('YYYY-MM-DD'),
+      amount_due: firstAmt,
+      pre_balance: totalRemainingToPay,
+      balance: Math.max(0, totalRemainingToPay - firstAmt),
       status: 'pending',
       recovery_officer: b.recovery_officer || null,
     });
-  }
-  if (installments.length) {
-    await supabaseAdmin.from('installments').insert(installments);
   }
 
   await logActivity({

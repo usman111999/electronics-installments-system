@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { COMPANY_NAME, LOGO_URL } from '../branding';
 
 export default function Login() {
   const { login } = useAuth();
@@ -33,11 +34,14 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-brand-50 via-white to-slate-100">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-600 text-white text-xl font-bold mb-3">E</div>
-          <h1 className="text-2xl font-bold text-slate-900">Electronics Instalments System</h1>
+          <img src={LOGO_URL} alt={COMPANY_NAME} className="mx-auto h-20 w-auto mb-4 rounded-xl bg-black/90 p-3 object-contain" />
+          <h1 className="text-2xl font-bold text-slate-900">{COMPANY_NAME}</h1>
           <p className="text-sm text-slate-500 mt-1">Sign in to access your portal</p>
         </div>
         <form onSubmit={submit} className="card space-y-4">
+          <div className="text-xs text-blue-900 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+            Use the same email &amp; password whether you are an admin, shop operator, or customer — the system takes you to the right screen automatically.
+          </div>
           {err && <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{err}</div>}
           <div>
             <label className="label">Email</label>
@@ -48,9 +52,6 @@ export default function Login() {
             <input type="password" className="input" value={password} onChange={e => setPassword(e.target.value)} required />
           </div>
           <button className="btn-primary w-full" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>
-          <p className="text-xs text-slate-400 text-center">
-            One login for all roles — system detects admin / operator / customer automatically.
-          </p>
         </form>
       </div>
     </div>

@@ -56,9 +56,13 @@ function groupByCustomer(installments) {
         next_due_date: null,
         worst_status: 'paid',
         order_ids: new Set(),
+        planned_by_order: {},
       };
       byCustomer.set(customer.id, row);
     }
+    // Track each order's full plan length once, so "paid / total" reflects the
+    // whole plan even though invoices are created one at a time (rolling model).
+    if (i?.orders?.id) row.planned_by_order[i.orders.id] = Number(i.orders.total_installments || 0);
     row.total += 1;
     row.total_due  += Number(i.amount_due || 0);
     row.total_paid += Number(i.amount_paid || 0);
@@ -79,7 +83,13 @@ function groupByCustomer(installments) {
       row.worst_status = i.status;
     }
   }
-  return Array.from(byCustomer.values()).map(r => ({ ...r, order_count: r.order_ids.size }));
+  return Array.from(byCustomer.values()).map(r => ({
+    ...r,
+    order_count: r.order_ids.size,
+    // Full planned installments across the customer's orders (fallback to the
+    // number created so far if a plan length is missing).
+    planned: Object.values(r.planned_by_order).reduce((s, n) => s + n, 0) || r.total,
+  }));
 }
 
 export default function Installments() {
@@ -132,7 +142,7 @@ export default function Installments() {
     let r = rows;
     if (filterChip === 'overdue') r = r.filter(x => x.overdue_count > 0);
     else if (filterChip === 'pending') r = r.filter(x => x.pending_count > 0 || x.partial_count > 0);
-    else if (filterChip === 'paid') r = r.filter(x => x.worst_status === 'paid' && x.paid_count === x.total);
+    else if (filterChip === 'paid') r = r.filter(x => x.planned > 0 && x.paid_count >= x.planned);
     if (search) {
       r = r.filter(x =>
         (x.customer_name || '').toLowerCase().includes(search) ||
@@ -215,7 +225,7 @@ export default function Installments() {
                   </td>
                   <td className="text-sm text-slate-600">{r.branch_name || '—'}</td>
                   <td>
-                    <div className="text-sm font-medium text-slate-900">{r.paid_count}/{r.total} paid</div>
+                    <div className="text-sm font-medium text-slate-900">{r.paid_count}/{r.planned} paid</div>
                     <div className="text-xs text-slate-500 flex gap-2 mt-0.5">
                       {r.overdue_count > 0 && <span className="text-red-600">{r.overdue_count} overdue</span>}
                       {r.partial_count > 0 && <span className="text-blue-600">{r.partial_count} partial</span>}
@@ -235,11 +245,11 @@ export default function Installments() {
                     ) : <span className="text-slate-400">—</span>}
                   </td>
                   <td>
-                    <span className={WORST_PILL[r.worst_status] || 'badge-gray'}>
-                      {r.worst_status === 'paid' && r.paid_count === r.total ? 'Fully Paid' :
+                    <span className={(r.paid_count >= r.planned && r.planned > 0) ? 'badge-green' : (WORST_PILL[r.worst_status] || 'badge-gray')}>
+                      {(r.paid_count >= r.planned && r.planned > 0) ? 'Fully Paid' :
                        r.worst_status === 'overdue' ? 'Overdue' :
                        r.worst_status === 'partial' ? 'Partial' :
-                       r.worst_status === 'pending' ? 'Pending' : r.worst_status}
+                       r.worst_status === 'pending' ? 'Pending' : 'In progress'}
                     </span>
                   </td>
                 </tr>
@@ -247,7 +257,7 @@ export default function Installments() {
             })}
             {!loading && filtered.length === 0 && (
               <tr><td colSpan="6" className="text-center text-slate-400 py-10">
-                {rows.length === 0 ? 'No installments on record yet.' : 'No customers match these filters.'}
+                {rows.length === 0 ? 'No installments yet. Create an order for a customer to start their plan — invoices then open one month at a time.' : 'No customers match these filters.'}
               </td></tr>
             )}
           </tbody>

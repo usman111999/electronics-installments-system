@@ -42,8 +42,8 @@ export default function Dashboard() {
       <PageHeader title="Dashboard" subtitle="Real-time business overview" />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Money in Market" value={fmt(overview.money_in_market)} accent="yellow"
-          sublabel={`Outstanding from ${overview.installments.overdue_count} overdue`}
+        <StatCard label="Money in Market (to collect)" value={fmt(overview.money_in_market)} accent="yellow"
+          sublabel={`Unpaid from customers · ${overview.installments.overdue_count} overdue`}
           icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>} />
         <StatCard label="Total Collected" value={fmt(overview.installments.collected)} accent="green"
           icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3"/></svg>} />

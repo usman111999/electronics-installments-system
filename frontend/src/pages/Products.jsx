@@ -76,9 +76,15 @@ export default function Products() {
             <div><label className="label">Name *</label><input required className="input" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}/></div>
             <div><label className="label">Model</label><input className="input" value={form.model || ''} onChange={e => setForm(f => ({ ...f, model: e.target.value }))}/></div>
             <div><label className="label">Company</label><input className="input" value={form.company || ''} onChange={e => setForm(f => ({ ...f, company: e.target.value }))}/></div>
-            <div><label className="label">Category</label><input className="input" value={form.category || ''} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}/></div>
+            <div><label className="label">Category</label>
+              <input className="input" list="product-categories" placeholder="Mobile, LED TV, Laptop…" value={form.category || ''} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}/>
+              <datalist id="product-categories">
+                {['Mobile Phone','Laptop','Tablet','LED / TV','Refrigerator','Air Conditioner','Washing Machine','Microwave Oven','Deep Freezer','Generator','UPS','Solar Panel','Fan','Water Dispenser','Sound System','Camera','Smart Watch','Gaming Console','Home Appliance','Accessories','Other'].map(c => <option key={c} value={c} />)}
+              </datalist>
+              <p className="text-xs text-slate-500 mt-1">Start typing to pick a suggestion, or type your own.</p>
+            </div>
             <div><label className="label">Base Price *</label><input type="number" step="0.01" required className="input" value={form.base_price ?? ''} onChange={e => setForm(f => ({ ...f, base_price: e.target.value }))}/></div>
-            <div><label className="label">Default Installment</label><input type="number" step="0.01" className="input" value={form.default_installment_price ?? ''} onChange={e => setForm(f => ({ ...f, default_installment_price: e.target.value }))}/></div>
+            <div><label className="label">Default Monthly Installment (Rs.)</label><input type="number" step="0.01" className="input" placeholder="optional suggestion" value={form.default_installment_price ?? ''} onChange={e => setForm(f => ({ ...f, default_installment_price: e.target.value }))}/></div>
             <div><label className="label">Discount %</label><input type="number" step="0.01" min="0" max="100" className="input" value={form.discount_percent ?? ''} onChange={e => setForm(f => ({ ...f, discount_percent: e.target.value }))}/></div>
             <div><label className="label">Discount Label</label><input className="input" placeholder="e.g. Eid sale" value={form.discount_label || ''} onChange={e => setForm(f => ({ ...f, discount_label: e.target.value }))}/></div>
             <div className="col-span-2"><label className="label">Description</label><textarea className="input" value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}/></div>

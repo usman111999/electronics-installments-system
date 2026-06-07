@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { COMPANY_NAME, LOGO_URL } from '../branding';
 
 const ICONS = {
   dashboard: (
@@ -162,13 +163,12 @@ export default function Layout() {
           transform transition-transform duration-200 ease-in-out
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
       >
-        <div className="px-5 py-5 border-b border-slate-800 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center text-white font-bold shrink-0">E</div>
-            <div className="min-w-0">
-              <div className="font-semibold text-white text-sm truncate">Electronics IS</div>
-              <div className="text-[11px] text-slate-400 capitalize truncate">{user?.role?.replace('_', ' ')} portal</div>
+        <div className="px-4 py-4 border-b border-slate-800 flex items-center justify-between">
+          <Link to="/" className="block min-w-0 flex-1">
+            <div className="h-12 w-full overflow-hidden rounded-lg bg-black flex items-center justify-center">
+              <img src={LOGO_URL} alt={COMPANY_NAME} className="h-full w-auto object-contain" />
             </div>
+            <div className="text-[11px] text-slate-400 capitalize truncate mt-1.5 text-center">{user?.role?.replace('_', ' ')} portal</div>
           </Link>
           {/* Close button — mobile only */}
           <button
@@ -192,8 +192,8 @@ export default function Layout() {
                 </NavLink>
               ))
             : sections.map(sec => (
-                <div key={sec.name} className="pb-1">
-                  <div className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+                <div key={sec.name} className="pb-1 mt-2 first:mt-0 border-t border-slate-800/70 first:border-0">
+                  <div className="px-3 pt-3 pb-1 text-[11px] uppercase tracking-wider text-slate-400 font-bold">
                     {sec.name}
                   </div>
                   {sec.items.map(it => (
@@ -236,8 +236,10 @@ export default function Layout() {
             </svg>
           </button>
           <div className="ml-3 flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-md bg-brand-600 flex items-center justify-center text-white font-bold text-sm shrink-0">E</div>
-            <div className="font-semibold text-slate-900 truncate">Electronics IS</div>
+            <div className="w-8 h-8 rounded-md bg-black overflow-hidden flex items-center justify-center shrink-0">
+              <img src={LOGO_URL} alt={COMPANY_NAME} className="h-full w-auto object-contain" />
+            </div>
+            <div className="font-semibold text-slate-900 truncate">{COMPANY_NAME}</div>
           </div>
         </div>
         <Outlet />

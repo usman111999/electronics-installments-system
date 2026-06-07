@@ -27,7 +27,8 @@ router.get('/', async (req, res) => {
 // POST /inventory - admin or operator add stock
 router.post('/', requirePermission('inventory.manage'), async (req, res) => {
   const body = req.body || {};
-  const branch_id = req.user.role === 'admin' ? (body.branch_id || req.user.branch_id) : req.user.branch_id;
+  const isManager = req.user.role === 'admin' || req.user.role === 'super_admin';
+  const branch_id = isManager ? (body.branch_id || req.user.branch_id) : req.user.branch_id;
   if (!branch_id) return res.status(400).json({ error: 'branch_id is required' });
   if (!body.product_id) return res.status(400).json({ error: 'product_id is required' });
 

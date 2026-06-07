@@ -42,6 +42,10 @@ export default function Orders() {
     setForm(f => ({
       ...f,
       product_id: id,
+      // Prefill the editable snapshots from the catalog item; the operator can
+      // still override them (e.g. for an item not in the catalog).
+      product_name_snapshot: p?.name ?? f.product_name_snapshot,
+      product_model_snapshot: p?.model ?? f.product_model_snapshot,
       installment_amount: p?.default_installment_price || f.installment_amount,
       total_price: p?.base_price || f.total_price,
     }));
@@ -100,9 +104,9 @@ export default function Orders() {
                 {customers.map(c => <option key={c.id} value={c.id}>{c.customer_name} (#{c.account_no})</option>)}
               </select>
             </div>
-            <div><label className="label">Product</label>
+            <div><label className="label">Product (from catalog)</label>
               <select className="input" value={form.product_id || ''} onChange={e => onProductChange(e.target.value)}>
-                <option value="">— select —</option>
+                <option value="">— none / custom —</option>
                 {products.map(p => <option key={p.id} value={p.id}>{p.name} {p.model && `· ${p.model}`}</option>)}
               </select>
             </div>
@@ -112,15 +116,27 @@ export default function Orders() {
                 {inventory.map(i => <option key={i.id} value={i.id}>{i.serial_no || 'no-serial'}</option>)}
               </select>
             </div>
+            <div><label className="label">Item / Product name</label>
+              <input className="input" placeholder="e.g. LED TV, Refrigerator, Laptop…" value={form.product_name_snapshot || ''} onChange={e => setForm(f => ({ ...f, product_name_snapshot: e.target.value }))}/>
+            </div>
+            <div><label className="label">Model</label>
+              <input className="input" placeholder="e.g. 43U7K, A2895…" value={form.product_model_snapshot || ''} onChange={e => setForm(f => ({ ...f, product_model_snapshot: e.target.value }))}/>
+            </div>
+            <div className="col-span-2"><label className="label">Accessories included</label>
+              <textarea className="input" rows="2" placeholder="e.g. Charger, earbuds, cover, warranty card, stabiliser…" value={form.accessories || ''} onChange={e => setForm(f => ({ ...f, accessories: e.target.value }))}/>
+            </div>
             <div><label className="label">Order Date *</label><input type="date" required className="input" value={form.order_date || ''} onChange={e => setForm(f => ({ ...f, order_date: e.target.value }))}/></div>
             <div><label className="label">Due Day (1–28)</label><input type="number" min="1" max="28" className="input" value={form.due_day || 5} onChange={e => setForm(f => ({ ...f, due_day: Number(e.target.value) }))}/></div>
-            <div><label className="label">Total Price *</label><input type="number" step="0.01" required className="input" value={form.total_price || ''} onChange={e => setForm(f => ({ ...f, total_price: e.target.value }))}/></div>
-            <div><label className="label">Advance</label><input type="number" step="0.01" className="input" value={form.advance_payment || ''} onChange={e => setForm(f => ({ ...f, advance_payment: e.target.value }))}/></div>
-            <div><label className="label">Discount</label><input type="number" step="0.01" className="input" value={form.discount || ''} onChange={e => setForm(f => ({ ...f, discount: e.target.value }))}/></div>
-            <div><label className="label">Installment Amount *</label><input type="number" step="0.01" required className="input" value={form.installment_amount || ''} onChange={e => setForm(f => ({ ...f, installment_amount: e.target.value }))}/></div>
-            <div><label className="label">Total Installments *</label><input type="number" required className="input" value={form.total_installments || ''} onChange={e => setForm(f => ({ ...f, total_installments: e.target.value, duration_months: e.target.value }))}/></div>
+            <div><label className="label">Total Price (Rs.) *</label><input type="number" step="0.01" required className="input" value={form.total_price || ''} onChange={e => setForm(f => ({ ...f, total_price: e.target.value }))}/></div>
+            <div><label className="label">Advance / Down payment (Rs.)</label><input type="number" step="0.01" className="input" value={form.advance_payment || ''} onChange={e => setForm(f => ({ ...f, advance_payment: e.target.value }))}/></div>
+            <div><label className="label">Discount (Rs.)</label><input type="number" step="0.01" className="input" value={form.discount || ''} onChange={e => setForm(f => ({ ...f, discount: e.target.value }))}/></div>
+            <div><label className="label">Monthly Installment (Rs.) *</label><input type="number" step="0.01" required className="input" placeholder="amount per month" value={form.installment_amount || ''} onChange={e => setForm(f => ({ ...f, installment_amount: e.target.value }))}/></div>
+            <div><label className="label">Total Months *</label><input type="number" min="1" required className="input" placeholder="any number — e.g. 4, 6, 12, 18" value={form.total_installments || ''} onChange={e => setForm(f => ({ ...f, total_installments: e.target.value, duration_months: e.target.value }))}/></div>
+            <div className="col-span-2 text-xs text-blue-900 bg-blue-50 border border-blue-100 rounded px-3 py-2">
+              Only the <b>first month's invoice</b> opens now. When it's marked paid, the next invoice opens automatically — one month at a time.
+            </div>
             <div><label className="label">Recovery Officer</label><input className="input" value={form.recovery_officer || ''} onChange={e => setForm(f => ({ ...f, recovery_officer: e.target.value }))}/></div>
-            {user?.role === 'admin' && (
+            {(user?.role === 'admin' || user?.role === 'super_admin') && (
               <div className="col-span-2"><label className="label">Branch *</label>
                 <select required className="input" value={form.branch_id || ''} onChange={e => setForm(f => ({ ...f, branch_id: e.target.value }))}>
                   <option value="">— select —</option>

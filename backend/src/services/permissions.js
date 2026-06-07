@@ -26,7 +26,7 @@ const DEFAULT_BUNDLES = {
   operator: [
     'users.view', 'users.create',
     'customers.view', 'customers.manage',
-    'products.view',
+    'products.view', 'products.manage',
     'inventory.view', 'inventory.manage',
     'orders.view', 'orders.create', 'orders.update',
     'installments.view', 'installments.record_payment',

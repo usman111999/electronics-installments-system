@@ -21,6 +21,7 @@ export default function OrderDetail() {
   const [selected, setSelected] = useState(null);
   const [pay, setPay] = useState({});
   const [err, setErr] = useState('');
+  const [instFilter, setInstFilter] = useState('all');
 
   const load = async () => {
     const { data } = await api.get(`/orders/${id}`);
@@ -28,9 +29,14 @@ export default function OrderDetail() {
   };
   useEffect(() => { load(); }, [id]);
 
+  const remainingOf = (inst) =>
+    Math.max(0, Number(inst.amount_due || 0) + Number(inst.fine || 0) - Number(inst.discount || 0) - Number(inst.amount_paid || 0));
+
   const openPay = (inst) => {
     setSelected(inst);
-    setPay({ amount_paid: inst.amount_due - (inst.amount_paid || 0), payment_date: dayjs().format('YYYY-MM-DD') });
+    // Default to clearing the full remaining balance; the operator can switch
+    // to a partial amount.
+    setPay({ amount_paid: remainingOf(inst), payment_date: dayjs().format('YYYY-MM-DD') });
     setPayOpen(true);
     setErr('');
   };
@@ -46,8 +52,22 @@ export default function OrderDetail() {
 
   if (!order) return <div className="p-8 text-slate-500">Loading…</div>;
 
-  const totalPaid = (order.installments || []).reduce((s, i) => s + Number(i.amount_paid || 0), 0);
-  const totalRemaining = (order.installments || []).reduce((s, i) => s + Math.max(0, Number(i.amount_due) - Number(i.amount_paid || 0)), 0);
+  const allInstallments = order.installments || [];
+  const totalPaid = allInstallments.reduce((s, i) => s + Number(i.amount_paid || 0), 0);
+  const totalRemaining = allInstallments.reduce((s, i) => s + remainingOf(i), 0);
+
+  // Invoice filter — paid / pending / overdue / partial.
+  const INST_FILTERS = [
+    { value: 'all', label: 'All' },
+    { value: 'paid', label: 'Paid' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'overdue', label: 'Overdue' },
+    { value: 'partial', label: 'Partial' },
+  ];
+  const counts = allInstallments.reduce((m, i) => { m[i.status] = (m[i.status] || 0) + 1; return m; }, {});
+  const visibleInstallments = instFilter === 'all'
+    ? allInstallments
+    : allInstallments.filter(i => i.status === instFilter);
 
   return (
     <div className="p-6">
@@ -63,11 +83,34 @@ export default function OrderDetail() {
 
       <DeviceCard order={order} onChanged={load} />
 
+      <div className="flex items-baseline justify-between gap-2 mt-2 mb-1">
+        <h3 className="font-semibold text-slate-900">Installment invoices</h3>
+        <span className="text-xs text-slate-500">
+          {counts.paid || 0} of {order.total_installments} paid · invoices open one at a time
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {INST_FILTERS.map(f => {
+          const n = f.value === 'all' ? allInstallments.length : (counts[f.value] || 0);
+          return (
+            <button key={f.value} type="button" onClick={() => setInstFilter(f.value)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                instFilter === f.value
+                  ? 'bg-brand-600 text-white border-brand-600'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}>
+              {f.label} <span className={instFilter === f.value ? 'text-white/80' : 'text-slate-400'}>({n})</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="card overflow-x-auto p-0">
         <table className="table-base">
           <thead><tr><th>#</th><th>Due</th><th>Pre-Bal</th><th>Amount</th><th>Paid</th><th>Disc</th><th>Fine</th><th>Balance</th><th>Receipt</th><th>Status</th><th></th></tr></thead>
           <tbody>
-            {(order.installments || []).map(i => (
+            {visibleInstallments.map(i => (
               <tr key={i.id}>
                 <td>{i.installment_no}</td>
                 <td>{dayjs(i.due_date).format('DD MMM YYYY')}</td>
@@ -82,24 +125,55 @@ export default function OrderDetail() {
                 <td>{i.status !== 'paid' && <button onClick={() => openPay(i)} className="text-brand-600 text-sm">Pay</button>}</td>
               </tr>
             ))}
+            {visibleInstallments.length === 0 && (
+              <tr><td colSpan="11" className="text-center text-slate-400 py-8">No {instFilter !== 'all' ? instFilter : ''} installments</td></tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      <Modal open={payOpen} onClose={() => setPayOpen(false)} title={`Record Payment — Inst #${selected?.installment_no}`}>
+      <Modal open={payOpen} onClose={() => setPayOpen(false)} title={`Record Payment — Invoice #${selected?.installment_no}`}>
         <form onSubmit={submitPay} className="space-y-3">
           {err && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">{err}</div>}
+          {selected && (
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm flex items-center justify-between">
+              <div>
+                <div className="text-slate-500">Remaining on this invoice</div>
+                <div className="text-xl font-bold text-slate-900">{fmt(remainingOf(selected))}</div>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setPay(p => ({ ...p, amount_paid: remainingOf(selected) }))}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${Number(pay.amount_paid) === remainingOf(selected) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white border-slate-200'}`}>
+                  Pay in full
+                </button>
+                <button type="button" onClick={() => setPay(p => ({ ...p, amount_paid: '' }))}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${pay.amount_paid !== '' && Number(pay.amount_paid) !== remainingOf(selected) ? 'bg-amber-500 text-white border-amber-500' : 'bg-white border-slate-200'}`}>
+                  Partial
+                </button>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">Amount Paid *</label><input type="number" step="0.01" required className="input" value={pay.amount_paid || ''} onChange={e => setPay(p => ({ ...p, amount_paid: e.target.value }))}/></div>
+            <div><label className="label">Amount to pay now *</label><input type="number" step="0.01" required autoFocus className="input" value={pay.amount_paid ?? ''} onChange={e => setPay(p => ({ ...p, amount_paid: e.target.value }))}/></div>
             <div><label className="label">Payment Date</label><input type="date" className="input" value={pay.payment_date || ''} onChange={e => setPay(p => ({ ...p, payment_date: e.target.value }))}/></div>
             <div><label className="label">Discount</label><input type="number" step="0.01" className="input" value={pay.discount || ''} onChange={e => setPay(p => ({ ...p, discount: e.target.value }))}/></div>
             <div><label className="label">Fine</label><input type="number" step="0.01" className="input" value={pay.fine || ''} onChange={e => setPay(p => ({ ...p, fine: e.target.value }))}/></div>
             <div className="col-span-2"><label className="label">Receipt # (auto if blank)</label><input className="input" value={pay.receipt_no || ''} onChange={e => setPay(p => ({ ...p, receipt_no: e.target.value }))}/></div>
             <div className="col-span-2"><label className="label">Remarks</label><input className="input" value={pay.remarks || ''} onChange={e => setPay(p => ({ ...p, remarks: e.target.value }))}/></div>
           </div>
+          {selected && Number(pay.amount_paid) >= remainingOf(selected) && remainingOf(selected) > 0 && (
+            <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-3 py-2">
+              ✓ This clears the invoice. The next invoice will open automatically (due one month from the payment date).
+            </div>
+          )}
+          {selected && pay.amount_paid !== '' && Number(pay.amount_paid) > 0 && Number(pay.amount_paid) < remainingOf(selected) && (
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-3 py-2">
+              Partial payment — this invoice stays open with the balance carried until it is fully paid.
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={() => setPayOpen(false)} className="btn-secondary">Cancel</button>
-            <button className="btn-primary">Record</button>
+            <button className="btn-primary">Record Payment</button>
           </div>
         </form>
       </Modal>

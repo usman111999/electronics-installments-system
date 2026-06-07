@@ -1,6 +1,6 @@
 const express = require('express');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
+const { authenticate, requirePermission, requireRole, scopeBranch } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
@@ -58,7 +58,8 @@ router.get('/:id', async (req, res) => {
 // POST /customers - create customer (and optionally a login)
 router.post('/', requirePermission('customers.manage'), async (req, res) => {
   const body = req.body || {};
-  const branch_id = req.user.role === 'admin' ? (body.branch_id || req.user.branch_id) : req.user.branch_id;
+  const isManager = req.user.role === 'admin' || req.user.role === 'super_admin';
+  const branch_id = isManager ? (body.branch_id || req.user.branch_id) : req.user.branch_id;
   if (!branch_id) return res.status(400).json({ error: 'branch_id required' });
   if (!body.customer_name) return res.status(400).json({ error: 'customer_name required' });
   if (!body.phone_1) return res.status(400).json({ error: 'phone_1 required' });
@@ -187,6 +188,44 @@ router.patch('/:id', requirePermission('customers.manage'), async (req, res) => 
   const { data: full } = await supabaseAdmin
     .from('customers').select('*, guarantors(*)').eq('id', id).single();
   res.json(full);
+});
+
+// DELETE /customers/:id — admin/super_admin only. Guarantors cascade; the
+// linked login (if any) is removed. Customers with orders are protected
+// because orders.customer_id is ON DELETE RESTRICT — we surface a clear 409
+// instead of a raw FK error.
+router.delete('/:id', requireRole('admin', 'super_admin'), async (req, res) => {
+  const { id } = req.params;
+
+  const { data: existing } = await supabaseAdmin
+    .from('customers').select('id, customer_name, profile_id').eq('id', id).single();
+  if (!existing) return res.status(404).json({ error: 'Customer not found' });
+
+  const { count: orderCount, error: countErr } = await supabaseAdmin
+    .from('orders').select('id', { count: 'exact', head: true }).eq('customer_id', id);
+  // Treat a failed/unknown count as "has orders" so we never delete on bad data.
+  if (countErr || orderCount == null || orderCount > 0) {
+    return res.status(409).json({
+      error: `Cannot delete: customer has ${orderCount || 'existing'} order(s). Cancel or reassign them first.`,
+    });
+  }
+
+  const { error } = await supabaseAdmin.from('customers').delete().eq('id', id);
+  if (error) return res.status(400).json({ error: error.message });
+
+  // Tear down the customer's login if one was provisioned. Delete the auth user
+  // first — profiles.id references auth.users ON DELETE CASCADE, so the profile
+  // row goes with it; the explicit profile delete is a harmless safety net.
+  if (existing.profile_id) {
+    await supabaseAdmin.auth.admin.deleteUser(existing.profile_id).catch(() => {});
+    await supabaseAdmin.from('profiles').delete().eq('id', existing.profile_id);
+  }
+
+  await logActivity({
+    userId: req.user.id, action: 'delete_customer',
+    entityType: 'customer', entityId: id, details: { name: existing.customer_name }, req,
+  });
+  res.json({ ok: true });
 });
 
 module.exports = router;

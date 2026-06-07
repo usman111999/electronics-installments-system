@@ -1,4 +1,5 @@
 import dayjs from 'dayjs';
+import { COMPANY_NAME, LOGO_URL } from '../branding';
 
 const blank = (s) => s || '';
 const fmt = (n) => Number(n || 0).toLocaleString();
@@ -16,6 +17,11 @@ export default function CustomerPrintForm({ customer }) {
   return (
     <div className="bg-white text-black mx-auto" style={{ maxWidth: '210mm', padding: '8mm', fontSize: '10px', fontFamily: 'Arial, sans-serif' }}>
       <style>{`.printable td, .printable th { border: 1px solid #444; padding: 2px 4px; vertical-align: top; }`}</style>
+
+      <div className="flex items-center justify-center gap-2 mb-2 pb-1" style={{ borderBottom: '2px solid #000' }}>
+        <img src={LOGO_URL} alt={COMPANY_NAME} style={{ height: '34px', width: 'auto', background: '#000', padding: '2px', borderRadius: '3px' }} />
+        <div className="font-bold" style={{ fontSize: '16px', letterSpacing: '0.5px' }}>{COMPANY_NAME}</div>
+      </div>
 
       <div className="flex justify-between items-start mb-1">
         <div>
@@ -90,6 +96,12 @@ export default function CustomerPrintForm({ customer }) {
                 <td><b>Total Rev:</b></td>
                 <td>{fmt(firstOrder.total_price)}</td>
               </tr>
+              {firstOrder.accessories && (
+                <tr>
+                  <td><b>Accessories:</b></td>
+                  <td colSpan={5}>{blank(firstOrder.accessories)}</td>
+                </tr>
+              )}
               <tr>
                 <td><b>Advance:</b></td>
                 <td>{fmt(firstOrder.advance_payment)}</td>
