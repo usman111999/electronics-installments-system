@@ -6,18 +6,19 @@ const { logActivity } = require('../services/activityLog');
 const router = express.Router();
 router.use(authenticate);
 
-// Sequential account numbers (no random). Next = highest existing sequential
-// account_no + 1, starting at 1000. Legacy 6-digit random numbers (>= 100000)
-// are ignored so the new sequence stays clean and never collides with them.
-// The unique constraint on account_no plus a one-shot retry guards the rare race.
+// Sequential, zero-padded account numbers (no random): 0001, 0002, 0003 …
+// Next = highest existing sequential account_no + 1. Legacy 6-digit random
+// numbers (>= 100000) are ignored so the clean sequence never collides with
+// them. The unique constraint on account_no plus a one-shot retry guards the
+// rare race.
 async function nextAccountNo() {
   const { data } = await supabaseAdmin.from('customers').select('account_no');
-  let max = 1000;
+  let max = 0;
   for (const r of data || []) {
     const n = parseInt(r.account_no, 10);
     if (Number.isFinite(n) && n > max && n < 100000) max = n;
   }
-  return String(max + 1);
+  return String(max + 1).padStart(4, '0');
 }
 
 // GET /customers - admin/operator list, operators scoped to branch; customer gets only self
