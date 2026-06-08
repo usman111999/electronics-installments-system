@@ -52,7 +52,7 @@ export default function Customers() {
 
       <div className="card overflow-x-auto p-0">
         <table className="table-base">
-          <thead><tr><th>Account #</th><th>Name</th><th>Father/Husband</th><th>Phone</th><th>Branch</th><th>CNIC</th><th className="text-right">Actions</th></tr></thead>
+          <thead><tr><th>Account #</th><th>Name</th><th>Father/Husband</th><th>Phone</th><th>Branch</th><th>Address</th><th>CNIC</th><th className="text-right">Actions</th></tr></thead>
           <tbody>
             {list.map(c => (
               <tr key={c.id}>
@@ -61,6 +61,7 @@ export default function Customers() {
                 <td>{c.father_husband_name || '-'}</td>
                 <td>{c.phone_1}</td>
                 <td>{c.branches?.name || '-'}</td>
+                <td className="max-w-[220px] truncate text-slate-600" title={c.home_address || c.official_address || ''}>{c.home_address || c.official_address || '-'}</td>
                 <td className="text-xs">{c.cnic || '-'}</td>
                 <td>
                   <div className="flex items-center justify-end gap-3 text-sm">
@@ -72,12 +73,12 @@ export default function Customers() {
               </tr>
             ))}
             {!loading && list.length === 0 && (
-              <tr><td colSpan="7" className="text-center py-10">
+              <tr><td colSpan="8" className="text-center py-10">
                 <p className="text-slate-400 mb-3">{search ? 'No customers match your search.' : 'No customers yet.'}</p>
                 {!search && <button onClick={openNew} className="btn-primary">+ Add your first customer</button>}
               </td></tr>
             )}
-            {loading && <tr><td colSpan="7" className="text-center text-slate-400 py-8">Loading…</td></tr>}
+            {loading && <tr><td colSpan="8" className="text-center text-slate-400 py-8">Loading…</td></tr>}
           </tbody>
         </table>
       </div>

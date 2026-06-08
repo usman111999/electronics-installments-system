@@ -58,8 +58,6 @@ export default function CustomerDetail() {
             <div className="flex justify-between"><dt className="text-slate-500">Phone 2</dt><dd>{customer.phone_2 || '-'}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-500">Occupation</dt><dd>{customer.occupation || '-'}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-500">Income</dt><dd>{customer.monthly_income ? fmt(customer.monthly_income) : '-'}</dd></div>
-            <div><dt className="text-slate-500">Home Address</dt><dd className="mt-1">{customer.home_address || '-'}</dd></div>
-            <div><dt className="text-slate-500">Office Address</dt><dd className="mt-1">{customer.official_address || '-'}</dd></div>
             {customer.crc_remarks && <div><dt className="text-slate-500">CRC Remarks</dt><dd className="mt-1">{customer.crc_remarks}</dd></div>}
           </dl>
         </div>

@@ -6,8 +6,18 @@ const { logActivity } = require('../services/activityLog');
 const router = express.Router();
 router.use(authenticate);
 
-function genAccountNo() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+// Sequential account numbers (no random). Next = highest existing sequential
+// account_no + 1, starting at 1000. Legacy 6-digit random numbers (>= 100000)
+// are ignored so the new sequence stays clean and never collides with them.
+// The unique constraint on account_no plus a one-shot retry guards the rare race.
+async function nextAccountNo() {
+  const { data } = await supabaseAdmin.from('customers').select('account_no');
+  let max = 1000;
+  for (const r of data || []) {
+    const n = parseInt(r.account_no, 10);
+    if (Number.isFinite(n) && n > max && n < 100000) max = n;
+  }
+  return String(max + 1);
 }
 
 // GET /customers - admin/operator list, operators scoped to branch; customer gets only self
@@ -94,7 +104,7 @@ router.post('/', requirePermission('customers.manage'), async (req, res) => {
   const customerInsert = {
     profile_id,
     branch_id,
-    account_no: body.account_no || genAccountNo(),
+    account_no: body.account_no || await nextAccountNo(),
     customer_name: body.customer_name,
     father_husband_name: body.father_husband_name,
     cnic: body.cnic,
@@ -113,8 +123,15 @@ router.post('/', requirePermission('customers.manage'), async (req, res) => {
     created_by: req.user.id,
   };
 
-  const { data: customer, error: custErr } = await supabaseAdmin
+  let { data: customer, error: custErr } = await supabaseAdmin
     .from('customers').insert(customerInsert).select().single();
+  // If a concurrent create grabbed the same sequential account_no, recompute and
+  // retry once (only when we generated the number, not when the caller set it).
+  if (custErr && /account_no/.test(custErr.message || '') && !body.account_no) {
+    customerInsert.account_no = await nextAccountNo();
+    ({ data: customer, error: custErr } = await supabaseAdmin
+      .from('customers').insert(customerInsert).select().single());
+  }
   if (custErr) return res.status(400).json({ error: custErr.message });
 
   // Insert guarantors

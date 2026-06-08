@@ -63,14 +63,6 @@ export default function CustomerPrintForm({ customer }) {
             <td>{blank(customer.gender)}</td>
           </tr>
           <tr>
-            <td><b>Residential:</b></td>
-            <td colSpan={5}>{blank(customer.home_address)}</td>
-          </tr>
-          <tr>
-            <td><b>Off. Address:</b></td>
-            <td colSpan={5}>{blank(customer.official_address)}</td>
-          </tr>
-          <tr>
             <td><b>Mobile 1:</b></td>
             <td>{blank(customer.phone_1)}</td>
             <td><b>Mobile 2:</b></td>
