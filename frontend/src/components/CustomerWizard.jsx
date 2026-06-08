@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import { api } from '../api/client';
 import Modal from './Modal';
 import ImageUpload from './ImageUpload';
+import ProductPicker from './ProductPicker';
 
 const blankGuarantor = () => ({ name: '', father_name: '', cnic: '', home_address: '', official_address: '', phone_1: '', phone_2: '', occupation: '', relation: '' });
 
@@ -65,6 +66,16 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
     } else setInventory([]);
   }, [order.product_id]);
 
+  // Auto-calculate the monthly installment = (total − advance − discount) ÷ months.
+  useEffect(() => {
+    const total = Number(order.total_price);
+    const months = Number(order.total_installments);
+    if (total > 0 && months > 0) {
+      const monthly = Math.round(Math.max(0, total - Number(order.advance_payment || 0) - Number(order.discount || 0)) / months);
+      setOrder(o => (Number(o.installment_amount) === monthly ? o : { ...o, installment_amount: monthly }));
+    }
+  }, [order.total_price, order.advance_payment, order.discount, order.total_installments]);
+
   const setC = (key, value) => setForm(f => ({ ...f, [key]: value }));
   const setO = (key, value) => setOrder(o => ({ ...o, [key]: value }));
   const updateGuarantor = (idx, key, value) => setForm(f => {
@@ -73,8 +84,8 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
     return { ...f, guarantors: g };
   });
 
-  const onPickProduct = (id) => {
-    const p = products.find(x => x.id === id);
+  const onPickProduct = (id, picked) => {
+    const p = picked || products.find(x => x.id === id);
     setOrder(o => ({
       ...o,
       product_id: id,
@@ -203,11 +214,13 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
           <div className="space-y-3">
             <p className="text-xs text-slate-500">Sell any electronics on installments (phone, LED, fridge, laptop…). Fill the price fields to start an installment plan now — or leave them blank to just save the customer and add the order later.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><label className="label">Product (from catalog)</label>
-                <select className="input" value={order.product_id || ''} onChange={e => onPickProduct(e.target.value)}>
-                  <option value="">— none / custom —</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name} {p.model && `· ${p.model}`}</option>)}
-                </select>
+              <div><label className="label">Product (search or create new)</label>
+                <ProductPicker
+                  products={products}
+                  value={order.product_id}
+                  onPick={(id, p) => onPickProduct(id, p)}
+                  onCreated={(p) => setProducts(prev => [p, ...prev])}
+                />
               </div>
               <div><label className="label">Inventory item (serial)</label>
                 <select className="input" value={order.inventory_id || ''} onChange={e => setO('inventory_id', e.target.value)}>
@@ -223,9 +236,9 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
               <div><label className="label">Total Price (Rs.)</label><input type="number" step="0.01" className="input" value={order.total_price || ''} onChange={e => setO('total_price', e.target.value)} /></div>
               <div><label className="label">Advance / Down payment (Rs.)</label><input type="number" step="0.01" className="input" value={order.advance_payment || ''} onChange={e => setO('advance_payment', e.target.value)} /></div>
               <div><label className="label">Discount (Rs.)</label><input type="number" step="0.01" className="input" value={order.discount || ''} onChange={e => setO('discount', e.target.value)} /></div>
-              <div><label className="label">Monthly Installment (Rs.)</label><input type="number" step="0.01" className="input" placeholder="amount per month" value={order.installment_amount || ''} onChange={e => setO('installment_amount', e.target.value)} /></div>
+              <div><label className="label">Monthly Installment (Rs.) <span className="font-normal text-slate-400">· auto</span></label><input type="number" step="0.01" className="input" placeholder="auto-calculated" value={order.installment_amount || ''} onChange={e => setO('installment_amount', e.target.value)} /></div>
               <div><label className="label">Total Months</label><input type="number" min="1" className="input" placeholder="any number — e.g. 4, 6, 12, 18" value={order.total_installments || ''} onChange={e => setO('total_installments', e.target.value)} /></div>
-              <div><label className="label">Recovery Officer</label><input className="input" value={order.recovery_officer || ''} onChange={e => setO('recovery_officer', e.target.value)} /></div>
+              <div><label className="label">Sales Officer</label><input className="input" value={order.sales_officer || ''} onChange={e => setO('sales_officer', e.target.value)} /></div>
             </div>
           </div>
         )}
@@ -284,7 +297,7 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
                     <Row k="Advance" v={fmt(order.advance_payment)} />
                     <Row k="Discount" v={fmt(order.discount)} />
                     <Row k="Plan" v={`${order.total_installments} × ${fmt(order.installment_amount)} (due day ${order.due_day})`} />
-                    <Row k="Recovery Officer" v={order.recovery_officer} />
+                    <Row k="Sales Officer" v={order.sales_officer} />
                   </>
                 ) : (
                   <div className="text-slate-400">No order — customer will be registered without a product.</div>

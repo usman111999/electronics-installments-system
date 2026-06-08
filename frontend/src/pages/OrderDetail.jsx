@@ -22,6 +22,17 @@ export default function OrderDetail() {
   const [pay, setPay] = useState({});
   const [err, setErr] = useState('');
   const [instFilter, setInstFilter] = useState('all');
+  const [genErr, setGenErr] = useState('');
+  const [generating, setGenerating] = useState(false);
+
+  const generateNext = async () => {
+    setGenerating(true); setGenErr('');
+    try {
+      await api.post('/installments/next', { order_id: id });
+      await load();
+    } catch (e) { setGenErr(e?.response?.data?.error || 'Could not generate the next invoice'); }
+    finally { setGenerating(false); }
+  };
 
   const load = async () => {
     const { data } = await api.get(`/orders/${id}`);
@@ -53,8 +64,19 @@ export default function OrderDetail() {
   if (!order) return <div className="p-8 text-slate-500">Loading…</div>;
 
   const allInstallments = order.installments || [];
-  const totalPaid = allInstallments.reduce((s, i) => s + Number(i.amount_paid || 0), 0);
-  const totalRemaining = allInstallments.reduce((s, i) => s + remainingOf(i), 0);
+  // True money picture, independent of how many invoices are created yet:
+  const advance = Number(order.advance_payment || 0);
+  const discount = Number(order.discount || 0);
+  const financed = Math.max(0, Number(order.total_price) - advance - discount); // amount to collect via installments
+  const instCollected = allInstallments.reduce((s, i) => s + Number(i.amount_paid || 0), 0);
+  const totalReceived = advance + instCollected;            // everything received so far (advance counts!)
+  const remaining = Math.max(0, financed - instCollected);  // real balance left over the whole plan
+  const paidCount = allInstallments.filter(i => i.status === 'paid').length;
+  const monthsLeft = Math.max(0, Number(order.total_installments || 0) - paidCount);
+  // Next invoice is generated on demand — only when nothing is unpaid, more
+  // months remain, and there's still a balance to bill.
+  const hasUnpaid = allInstallments.some(i => i.status !== 'paid');
+  const canGenerateNext = !hasUnpaid && allInstallments.length < Number(order.total_installments || 0) && remaining > 0;
 
   // Invoice filter — paid / pending / overdue / partial.
   const INST_FILTERS = [
@@ -74,21 +96,31 @@ export default function OrderDetail() {
       <PageHeader title={`Order ${order.order_no}`} subtitle={`${order.customers?.customer_name} · ${order.product_name_snapshot || ''}`}
         actions={<Link to="/orders" className="btn-secondary">← Back</Link>} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
-        <div className="card"><div className="text-xs uppercase text-slate-500">Total</div><div className="text-2xl font-bold">{fmt(order.total_price)}</div></div>
-        <div className="card"><div className="text-xs uppercase text-slate-500">Advance</div><div className="text-2xl font-bold">{fmt(order.advance_payment)}</div></div>
-        <div className="card"><div className="text-xs uppercase text-slate-500">Collected</div><div className="text-2xl font-bold text-emerald-600">{fmt(totalPaid)}</div></div>
-        <div className="card"><div className="text-xs uppercase text-slate-500">Outstanding</div><div className="text-2xl font-bold text-amber-600">{fmt(totalRemaining)}</div></div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
+        <div className="card"><div className="text-xs uppercase text-slate-500">Total Price</div><div className="text-2xl font-bold">{fmt(order.total_price)}</div>{discount > 0 && <div className="text-xs text-slate-400">less discount {fmt(discount)}</div>}</div>
+        <div className="card"><div className="text-xs uppercase text-slate-500">Advance Paid</div><div className="text-2xl font-bold text-emerald-600">{fmt(advance)}</div><div className="text-xs text-slate-400">received upfront</div></div>
+        <div className="card"><div className="text-xs uppercase text-slate-500">Collected</div><div className="text-2xl font-bold text-emerald-600">{fmt(totalReceived)}</div><div className="text-xs text-slate-400">advance + {paidCount} installment{paidCount === 1 ? '' : 's'}</div></div>
+        <div className="card"><div className="text-xs uppercase text-slate-500">Remaining</div><div className="text-2xl font-bold text-amber-600">{fmt(remaining)}</div><div className="text-xs text-slate-400">{monthsLeft} of {order.total_installments} months left</div></div>
+      </div>
+
+      <div className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 mb-6">
+        Advance <b>{fmt(advance)}</b> received{discount > 0 ? <> · discount <b>{fmt(discount)}</b></> : null} · <b>{fmt(financed)}</b> financed over <b>{order.total_installments}</b> months · <b>{fmt(remaining)}</b> still to collect.
       </div>
 
       <DeviceCard order={order} onChanged={load} />
 
-      <div className="flex items-baseline justify-between gap-2 mt-2 mb-1">
-        <h3 className="font-semibold text-slate-900">Installment invoices</h3>
-        <span className="text-xs text-slate-500">
-          {counts.paid || 0} of {order.total_installments} paid · invoices open one at a time
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-2 mt-2 mb-2">
+        <div>
+          <h3 className="font-semibold text-slate-900">Installment invoices</h3>
+          <span className="text-xs text-slate-500">{paidCount} of {order.total_installments} paid · generate each invoice when you collect it</span>
+        </div>
+        {canGenerateNext && (
+          <button onClick={generateNext} disabled={generating} className="btn-primary">
+            {generating ? 'Generating…' : '+ Generate next invoice'}
+          </button>
+        )}
       </div>
+      {genErr && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded mb-2">{genErr}</div>}
 
       <div className="flex flex-wrap gap-1.5 mb-3">
         {INST_FILTERS.map(f => {
@@ -163,7 +195,7 @@ export default function OrderDetail() {
           </div>
           {selected && Number(pay.amount_paid) >= remainingOf(selected) && remainingOf(selected) > 0 && (
             <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-3 py-2">
-              ✓ This clears the invoice. The next invoice will open automatically (due one month from the payment date).
+              ✓ This clears the invoice. After saving, click “+ Generate next invoice” when you’re ready to bill the next month.
             </div>
           )}
           {selected && pay.amount_paid !== '' && Number(pay.amount_paid) > 0 && Number(pay.amount_paid) < remainingOf(selected) && (

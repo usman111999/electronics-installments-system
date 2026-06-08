@@ -4,6 +4,8 @@ import dayjs from 'dayjs';
 import { api } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import CustomerPrintForm from '../components/CustomerPrintForm';
+import Modal from '../components/Modal';
+import OrderForm from '../components/OrderForm';
 
 const fmt = (n) => `Rs. ${Number(n || 0).toLocaleString()}`;
 
@@ -11,6 +13,7 @@ export default function CustomerDetail() {
   const { id } = useParams();
   const [customer, setCustomer] = useState(null);
   const [showPrint, setShowPrint] = useState(false);
+  const [orderOpen, setOrderOpen] = useState(false);
 
   const load = async () => {
     const { data } = await api.get(`/customers/${id}`);
@@ -35,6 +38,7 @@ export default function CustomerDetail() {
       <PageHeader title={customer.customer_name} subtitle={`Account #${customer.account_no} · ${customer.branches?.name || ''}`}
         actions={
           <>
+            <button className="btn-primary" onClick={() => setOrderOpen(true)}>+ New Order</button>
             <button className="btn-secondary" onClick={() => setShowPrint(true)}>Print Account Form</button>
             <Link to="/customers" className="btn-secondary">← Back</Link>
           </>
@@ -84,7 +88,7 @@ export default function CustomerDetail() {
           <div className="card">
             <h3 className="font-semibold mb-3">Orders ({customer.orders?.length || 0})</h3>
             {!customer.orders || customer.orders.length === 0 ? (
-              <p className="text-sm text-slate-400">No orders</p>
+              <button onClick={() => setOrderOpen(true)} className="btn-primary">+ Create first order</button>
             ) : (
               <table className="table-base">
                 <thead><tr><th>Order #</th><th>Date</th><th>Product</th><th>Total</th><th>Inst.</th><th>Status</th></tr></thead>
@@ -107,6 +111,15 @@ export default function CustomerDetail() {
           </div>
         </div>
       </div>
+
+      <Modal open={orderOpen} onClose={() => setOrderOpen(false)} title={`New Order — ${customer.customer_name}`} size="lg">
+        <OrderForm
+          customerId={customer.id}
+          branchId={customer.branch_id}
+          onCancel={() => setOrderOpen(false)}
+          onCreated={() => { setOrderOpen(false); load(); }}
+        />
+      </Modal>
     </div>
   );
 }

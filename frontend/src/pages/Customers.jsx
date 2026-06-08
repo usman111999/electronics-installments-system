@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import CustomerWizard from '../components/CustomerWizard';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { useAuth } from '../context/AuthContext';
 
 export default function Customers() {
@@ -15,6 +16,9 @@ export default function Customers() {
   const [editing, setEditing] = useState(null);
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [toDelete, setToDelete] = useState(null);
+  const [delErr, setDelErr] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -32,12 +36,16 @@ export default function Customers() {
   const openEdit = (c) => { setEditing(c); setOpen(true); };
   const closeModal = () => { setOpen(false); setEditing(null); };
 
-  const remove = async (c) => {
-    if (!window.confirm(`Delete customer "${c.customer_name}" (#${c.account_no})? This cannot be undone.`)) return;
+  const askDelete = (c) => { setToDelete(c); setDelErr(''); };
+  const confirmDelete = async () => {
+    setDeleting(true); setDelErr('');
     try {
-      await api.delete(`/customers/${c.id}`);
+      await api.delete(`/customers/${toDelete.id}`);
+      setToDelete(null);
       await load();
-    } catch (e) { window.alert(e?.response?.data?.error || 'Delete failed'); }
+    } catch (e) {
+      setDelErr(e?.response?.data?.error || 'Delete failed');
+    } finally { setDeleting(false); }
   };
 
   return (
@@ -67,7 +75,7 @@ export default function Customers() {
                   <div className="flex items-center justify-end gap-3 text-sm">
                     <Link to={`/customers/${c.id}`} className="text-brand-600">View</Link>
                     <button onClick={() => openEdit(c)} className="text-slate-600 hover:text-slate-900">Edit</button>
-                    {canDelete && <button onClick={() => remove(c)} className="text-red-600 hover:text-red-700">Delete</button>}
+                    {canDelete && <button onClick={() => askDelete(c)} className="text-red-600 hover:text-red-700">Delete</button>}
                   </div>
                 </td>
               </tr>
@@ -90,6 +98,17 @@ export default function Customers() {
         branches={branches}
         isAdmin={isAdmin}
         onSaved={load}
+      />
+
+      <ConfirmDialog
+        open={!!toDelete}
+        title="Delete customer?"
+        message={toDelete ? `This permanently deletes "${toDelete.customer_name}" (#${toDelete.account_no}). This cannot be undone.` : ''}
+        error={delErr}
+        confirmLabel="Delete customer"
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setToDelete(null)}
       />
     </div>
   );

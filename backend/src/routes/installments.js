@@ -95,35 +95,9 @@ router.post('/:id/pay', requirePermission('installments.record_payment'), async 
     .eq('id', id).select().single();
   if (error) return res.status(400).json({ error: error.message });
 
-  // Rolling generation: when this invoice is fully paid, open the NEXT one
-  // (one month on from the payment date). Skip when the plan is finished or the
-  // balance is cleared, and never duplicate an existing next invoice.
-  let nextInstallment = null;
-  if (status === 'paid') {
-    const { data: allInst } = await supabaseAdmin
-      .from('installments').select('installment_no, amount_due').eq('order_id', inst.order_id);
-    const createdCount = (allInst || []).length;
-    const sumDue = (allInst || []).reduce((s, x) => s + Number(x.amount_due || 0), 0);
-    const totalToPay = Number(order.total_price) - Number(order.advance_payment || 0) - Number(order.discount || 0);
-    const remaining = Math.round((totalToPay - sumDue) * 100) / 100;
-    const maxNo = (allInst || []).reduce((m, x) => Math.max(m, x.installment_no), 0);
-
-    if (createdCount < Number(order.total_installments) && remaining > 0.009) {
-      const nextAmt = Math.min(Number(order.installment_amount), remaining);
-      const nextDue = clampDueDate(dayjs(paidDate), 1, order.due_day || 5);
-      const { data: created } = await supabaseAdmin.from('installments').insert({
-        order_id: inst.order_id,
-        installment_no: maxNo + 1,
-        due_date: nextDue.format('YYYY-MM-DD'),
-        amount_due: nextAmt,
-        pre_balance: remaining,
-        balance: Math.max(0, remaining - nextAmt),
-        status: 'pending',
-        recovery_officer: order.recovery_officer || null,
-      }).select().single();
-      nextInstallment = created || null;
-    }
-  }
+  // The NEXT invoice is NOT created automatically here. The operator generates
+  // it on demand via POST /installments/next (a button on the order page), so
+  // there's never a surprise pending invoice right after a payment.
 
   // Order completion: every created invoice paid AND nothing left to bill
   // (either the plan length is reached or the balance is cleared).
@@ -165,7 +139,62 @@ router.post('/:id/pay', requirePermission('installments.record_payment'), async 
     }
   })();
 
-  res.json({ ...updated, next_installment: nextInstallment });
+  res.json(updated);
+});
+
+// Generate the NEXT invoice for an order, on demand (the "Generate next invoice"
+// button). Requires the current invoice to be fully paid first, and stops when
+// the plan length is reached or the balance is cleared.
+router.post('/next', requirePermission('installments.record_payment'), async (req, res) => {
+  const orderId = req.body?.order_id;
+  if (!orderId) return res.status(400).json({ error: 'order_id required' });
+
+  const { data: order } = await supabaseAdmin.from('orders').select('*').eq('id', orderId).single();
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  if (req.user.role === 'operator' && order.branch_id !== req.user.branch_id) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const { data: allInst } = await supabaseAdmin
+    .from('installments').select('*').eq('order_id', orderId).order('installment_no', { ascending: true });
+
+  if ((allInst || []).length >= Number(order.total_installments)) {
+    return res.status(409).json({ error: 'All invoices for this plan have already been created.' });
+  }
+  const last = (allInst || [])[allInst.length - 1];
+  if (last && last.status !== 'paid') {
+    return res.status(409).json({ error: 'Mark the current invoice as paid before generating the next one.' });
+  }
+
+  const sumDue = (allInst || []).reduce((s, x) => s + Number(x.amount_due || 0), 0);
+  const totalToPay = Number(order.total_price) - Number(order.advance_payment || 0) - Number(order.discount || 0);
+  const remaining = Math.round((totalToPay - sumDue) * 100) / 100;
+  if (remaining <= 0.009) {
+    return res.status(409).json({ error: 'Nothing left to bill — the balance is already cleared.' });
+  }
+
+  const nextAmt = Math.min(Number(order.installment_amount), remaining);
+  const base = last?.payment_date ? dayjs(last.payment_date) : dayjs(order.order_date);
+  const nextDue = clampDueDate(base, 1, order.due_day || 5);
+
+  const { data: created, error } = await supabaseAdmin.from('installments').insert({
+    order_id: orderId,
+    installment_no: (last?.installment_no || 0) + 1,
+    due_date: nextDue.format('YYYY-MM-DD'),
+    amount_due: nextAmt,
+    pre_balance: remaining,
+    balance: Math.max(0, remaining - nextAmt),
+    status: 'pending',
+    recovery_officer: order.recovery_officer || null,
+  }).select().single();
+  if (error) return res.status(400).json({ error: error.message });
+
+  await logActivity({
+    userId: req.user.id, branchId: order.branch_id, action: 'create_installment',
+    entityType: 'installment', entityId: created.id,
+    details: { order_id: orderId, installment_no: created.installment_no }, req,
+  });
+  res.status(201).json(created);
 });
 
 router.post('/mark-overdue', requirePermission('installments.record_payment'), async (_req, res) => {

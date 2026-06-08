@@ -37,6 +37,16 @@ export default function Orders() {
     } else setInventory([]);
   }, [form.product_id]);
 
+  // Auto-calculate monthly installment = (total − advance − discount) ÷ months.
+  useEffect(() => {
+    const total = Number(form.total_price);
+    const months = Number(form.total_installments);
+    if (total > 0 && months > 0) {
+      const monthly = Math.round(Math.max(0, total - Number(form.advance_payment || 0) - Number(form.discount || 0)) / months);
+      setForm(f => (Number(f.installment_amount) === monthly ? f : { ...f, installment_amount: monthly }));
+    }
+  }, [form.total_price, form.advance_payment, form.discount, form.total_installments]);
+
   const onProductChange = (id) => {
     const p = products.find(x => x.id === id);
     setForm(f => ({
@@ -130,12 +140,12 @@ export default function Orders() {
             <div><label className="label">Total Price (Rs.) *</label><input type="number" step="0.01" required className="input" value={form.total_price || ''} onChange={e => setForm(f => ({ ...f, total_price: e.target.value }))}/></div>
             <div><label className="label">Advance / Down payment (Rs.)</label><input type="number" step="0.01" className="input" value={form.advance_payment || ''} onChange={e => setForm(f => ({ ...f, advance_payment: e.target.value }))}/></div>
             <div><label className="label">Discount (Rs.)</label><input type="number" step="0.01" className="input" value={form.discount || ''} onChange={e => setForm(f => ({ ...f, discount: e.target.value }))}/></div>
-            <div><label className="label">Monthly Installment (Rs.) *</label><input type="number" step="0.01" required className="input" placeholder="amount per month" value={form.installment_amount || ''} onChange={e => setForm(f => ({ ...f, installment_amount: e.target.value }))}/></div>
+            <div><label className="label">Monthly Installment (Rs.) * <span className="font-normal text-slate-400">· auto</span></label><input type="number" step="0.01" required className="input" placeholder="auto-calculated" value={form.installment_amount || ''} onChange={e => setForm(f => ({ ...f, installment_amount: e.target.value }))}/></div>
             <div><label className="label">Total Months *</label><input type="number" min="1" required className="input" placeholder="any number — e.g. 4, 6, 12, 18" value={form.total_installments || ''} onChange={e => setForm(f => ({ ...f, total_installments: e.target.value, duration_months: e.target.value }))}/></div>
             <div className="col-span-2 text-xs text-blue-900 bg-blue-50 border border-blue-100 rounded px-3 py-2">
-              Only the <b>first month's invoice</b> opens now. When it's marked paid, the next invoice opens automatically — one month at a time.
+              Only the <b>first month's invoice</b> opens now. After you collect a payment, use <b>“Generate next invoice”</b> on the order page to bill the next month.
             </div>
-            <div><label className="label">Recovery Officer</label><input className="input" value={form.recovery_officer || ''} onChange={e => setForm(f => ({ ...f, recovery_officer: e.target.value }))}/></div>
+            <div><label className="label">Sales Officer</label><input className="input" value={form.sales_officer || ''} onChange={e => setForm(f => ({ ...f, sales_officer: e.target.value }))}/></div>
             {(user?.role === 'admin' || user?.role === 'super_admin') && (
               <div className="col-span-2"><label className="label">Branch *</label>
                 <select required className="input" value={form.branch_id || ''} onChange={e => setForm(f => ({ ...f, branch_id: e.target.value }))}>

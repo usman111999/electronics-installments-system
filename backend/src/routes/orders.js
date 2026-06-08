@@ -137,6 +137,7 @@ router.post('/', requirePermission('orders.create'), async (req, res) => {
     total_installments: b.total_installments,
     duration_months: b.duration_months || b.total_installments,
     due_day,
+    sales_officer: b.sales_officer || null,
     recovery_officer: b.recovery_officer || null,
     notes: b.notes || null,
     created_by: req.user.id,

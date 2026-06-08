@@ -90,8 +90,7 @@ const NAV = [
   { section: 'Sales',      label: 'Orders',       to: '/orders',       icon: ICONS.orders,       requires: 'orders.view' },
   { section: 'Sales',      label: 'Installments', to: '/installments', icon: ICONS.installments, requires: 'installments.view' },
 
-  { section: 'Catalog',    label: 'Products',     to: '/products',     icon: ICONS.products,     requires: 'products.view' },
-  { section: 'Catalog',    label: 'Inventory',    to: '/inventory',    icon: ICONS.inventory,    requires: 'inventory.view' },
+  { section: 'Catalog',    label: 'Products & Stock', to: '/products', icon: ICONS.products,     requires: 'products.view' },
 
   { section: 'Operations', label: 'Devices',      to: '/devices',      icon: ICONS.devices,      requires: 'devices.view' },
   { section: 'Operations', label: 'WhatsApp',     to: '/whatsapp',     icon: ICONS.whatsapp,     requires: 'whatsapp.view' },

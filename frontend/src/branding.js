@@ -4,4 +4,4 @@ export const COMPANY_NAME = 'Ansaf Electronic';
 export const COMPANY_SHORT = 'Ansaf';
 export const COMPANY_TAGLINE = 'Electronics on easy installments';
 export const LOGO_URL =
-  'https://koldxkjvbifsszuhjrll.supabase.co/storage/v1/object/public/branding/ansaf-logo.jpg';
+  'https://koldxkjvbifsszuhjrll.supabase.co/storage/v1/object/public/branding/ansaf-logo.png';
