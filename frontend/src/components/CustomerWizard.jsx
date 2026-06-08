@@ -245,7 +245,9 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
                   <div><label className="label">Phone 1</label><input className="input" value={form.guarantors[idx]?.phone_1 || ''} onChange={e => updateGuarantor(idx, 'phone_1', e.target.value)} /></div>
                   <div><label className="label">Phone 2</label><input className="input" value={form.guarantors[idx]?.phone_2 || ''} onChange={e => updateGuarantor(idx, 'phone_2', e.target.value)} /></div>
                   <div><label className="label">Relation</label><input className="input" value={form.guarantors[idx]?.relation || ''} onChange={e => updateGuarantor(idx, 'relation', e.target.value)} /></div>
+                  <div><label className="label">Occupation</label><input className="input" value={form.guarantors[idx]?.occupation || ''} onChange={e => updateGuarantor(idx, 'occupation', e.target.value)} /></div>
                   <div className="sm:col-span-3"><label className="label">Home Address</label><textarea className="input" value={form.guarantors[idx]?.home_address || ''} onChange={e => updateGuarantor(idx, 'home_address', e.target.value)} /></div>
+                  <div className="sm:col-span-3"><label className="label">Official Address</label><textarea className="input" value={form.guarantors[idx]?.official_address || ''} onChange={e => updateGuarantor(idx, 'official_address', e.target.value)} /></div>
                 </div>
               </section>
             ))}

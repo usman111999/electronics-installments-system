@@ -67,11 +67,14 @@ export default function CustomerDetail() {
             <h3 className="font-semibold mb-3">Guarantors ({customer.guarantors?.length || 0})</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {(customer.guarantors || []).map(g => (
-                <div key={g.id} className="border border-slate-200 rounded-lg p-3 text-sm">
+                <div key={g.id} className="border border-slate-200 rounded-lg p-3 text-sm space-y-0.5">
                   <div className="font-semibold">#{g.guarantor_number} · {g.name}</div>
                   <div className="text-slate-500">{g.relation || ''} {g.father_name && `· s/o ${g.father_name}`}</div>
                   <div className="mt-1">📞 {g.phone_1} {g.phone_2 && `· ${g.phone_2}`}</div>
-                  {g.home_address && <div className="text-xs text-slate-500 mt-1">🏠 {g.home_address}</div>}
+                  {g.cnic && <div className="text-xs text-slate-500">🪪 {g.cnic}</div>}
+                  {g.occupation && <div className="text-xs text-slate-500">💼 {g.occupation}</div>}
+                  {g.home_address && <div className="text-xs text-slate-500">🏠 Home: {g.home_address}</div>}
+                  {g.official_address && <div className="text-xs text-slate-500">🏢 Office: {g.official_address}</div>}
                 </div>
               ))}
               {(!customer.guarantors || customer.guarantors.length === 0) && <p className="text-sm text-slate-400">No guarantors on file</p>}
