@@ -36,11 +36,13 @@ export default function Customers() {
   const openEdit = (c) => { setEditing(c); setOpen(true); };
   const closeModal = () => { setOpen(false); setEditing(null); };
 
+  const orderCountOf = (c) => c?.orders?.[0]?.count ?? 0;
   const askDelete = (c) => { setToDelete(c); setDelErr(''); };
   const confirmDelete = async () => {
     setDeleting(true); setDelErr('');
     try {
-      await api.delete(`/customers/${toDelete.id}`);
+      // force=true: the admin has confirmed, so cancel any orders and delete.
+      await api.delete(`/customers/${toDelete.id}?force=true`);
       setToDelete(null);
       await load();
     } catch (e) {
@@ -103,9 +105,13 @@ export default function Customers() {
       <ConfirmDialog
         open={!!toDelete}
         title="Delete customer?"
-        message={toDelete ? `This permanently deletes "${toDelete.customer_name}" (#${toDelete.account_no}). This cannot be undone.` : ''}
+        message={toDelete
+          ? (orderCountOf(toDelete) > 0
+              ? `Are you sure you want to delete "${toDelete.customer_name}" (#${toDelete.account_no})? This customer has ${orderCountOf(toDelete)} order(s) which will be cancelled. This cannot be undone.`
+              : `This permanently deletes "${toDelete.customer_name}" (#${toDelete.account_no}). This cannot be undone.`)
+          : ''}
         error={delErr}
-        confirmLabel="Delete customer"
+        confirmLabel={toDelete && orderCountOf(toDelete) > 0 ? 'Cancel order(s) & delete' : 'Delete customer'}
         busy={deleting}
         onConfirm={confirmDelete}
         onCancel={() => setToDelete(null)}

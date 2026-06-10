@@ -70,4 +70,18 @@ body {
   .no-print { display: none !important; }
   .print-only { display: block !important; }
   @page { size: A4; margin: 10mm; }
+
+  /* Let the document flow naturally for print. The app shell (a `flex h-full`
+     root with a scrollable <main> and html/body/#root pinned to height:100%)
+     otherwise traps the form in a fixed-height scroll box and spills it across
+     several blank pages. Flatten all of that so the form prints on its own. */
+  html, body, #root { height: auto !important; overflow: visible !important; }
+  #root > div { display: block !important; height: auto !important; overflow: visible !important; }
+  main { display: block !important; height: auto !important; overflow: visible !important; }
+
+  /* Fit the form to the printable area (the @page margin already supplies the
+     10mm border) so it never overflows horizontally onto extra pages. */
+  .print-form { max-width: 100% !important; width: 100% !important; padding: 0 !important; margin: 0 !important; }
+  .print-form table { page-break-inside: auto; }
+  .print-form tr { page-break-inside: avoid; }
 }

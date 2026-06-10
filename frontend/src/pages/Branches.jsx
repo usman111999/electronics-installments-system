@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Modal from '../components/Modal';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Branches() {
   const [list, setList] = useState([]);
@@ -9,6 +10,10 @@ export default function Branches() {
   const [edit, setEdit] = useState(null);
   const [form, setForm] = useState({});
   const [err, setErr] = useState('');
+  const [toDelete, setToDelete] = useState(null);
+  const [delErr, setDelErr] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [busyId, setBusyId] = useState(null);
 
   const load = async () => {
     const { data } = await api.get('/branches');
@@ -45,6 +50,29 @@ export default function Branches() {
     } catch (e) { setErr(e?.response?.data?.error || 'Save failed'); }
   };
 
+  const toggleActive = async (b) => {
+    setBusyId(b.id);
+    try {
+      await api.post(`/branches/${b.id}/active`, { is_active: !b.is_active });
+      await load();
+    } catch (e) {
+      // Surface the failure inline rather than silently swallowing it.
+      setErr(e?.response?.data?.error || 'Could not update branch status');
+    } finally { setBusyId(null); }
+  };
+
+  const askDelete = (b) => { setToDelete(b); setDelErr(''); };
+  const confirmDelete = async () => {
+    setDeleting(true); setDelErr('');
+    try {
+      await api.delete(`/branches/${toDelete.id}`);
+      setToDelete(null);
+      await load();
+    } catch (e) {
+      setDelErr(e?.response?.data?.error || 'Delete failed');
+    } finally { setDeleting(false); }
+  };
+
   return (
     <div className="p-6">
       <PageHeader title="Branches" subtitle="Manage company branches"
@@ -62,7 +90,15 @@ export default function Branches() {
                 <td>{b.manager_name || '-'}</td>
                 <td>{b.auto_lock_days ? `${b.auto_lock_days} days` : <span className="text-slate-400">off</span>}</td>
                 <td>{b.is_active ? <span className="badge-green">Active</span> : <span className="badge-gray">Disabled</span>}</td>
-                <td><button onClick={() => openEdit(b)} className="text-brand-600 text-sm">Edit</button></td>
+                <td>
+                  <div className="flex items-center justify-end gap-3 text-sm">
+                    <button onClick={() => openEdit(b)} className="text-brand-600">Edit</button>
+                    <button onClick={() => toggleActive(b)} disabled={busyId === b.id} className="text-slate-600 hover:text-slate-900 disabled:opacity-50">
+                      {b.is_active ? 'Disable' : 'Enable'}
+                    </button>
+                    <button onClick={() => askDelete(b)} className="text-red-600 hover:text-red-700">Delete</button>
+                  </div>
+                </td>
               </tr>
             ))}
             {list.length === 0 && <tr><td colSpan="8" className="text-center text-slate-400 py-8">No branches yet</td></tr>}
@@ -101,6 +137,17 @@ export default function Branches() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!toDelete}
+        title="Delete branch?"
+        message={toDelete ? `This permanently deletes "${toDelete.name}". A branch can only be deleted once it has no customers or orders — otherwise disable it instead. This cannot be undone.` : ''}
+        error={delErr}
+        confirmLabel="Delete branch"
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }

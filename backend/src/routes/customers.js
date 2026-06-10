@@ -31,7 +31,7 @@ router.get('/', async (req, res) => {
 
   let q = supabaseAdmin
     .from('customers')
-    .select('*, branches(id, name, code), guarantors(*)')
+    .select('*, branches(id, name, code), guarantors(*), orders(count)')
     .order('created_at', { ascending: false });
 
   const scope = scopeBranch(req);
@@ -208,24 +208,42 @@ router.patch('/:id', requirePermission('customers.manage'), async (req, res) => 
   res.json(full);
 });
 
-// DELETE /customers/:id — admin/super_admin only. Guarantors cascade; the
-// linked login (if any) is removed. Customers with orders are protected
-// because orders.customer_id is ON DELETE RESTRICT — we surface a clear 409
-// instead of a raw FK error.
+// DELETE /customers/:id — admin/super_admin only. Guarantors and whatsapp
+// notifications cascade; the linked login (if any) is removed. Orders block
+// deletion because orders.customer_id is ON DELETE RESTRICT: without
+// ?force=true we return a 409 reporting the order count so the UI can confirm.
+// With ?force=true we first cancel (delete) the customer's orders — their
+// installments, devices and device-lock rows cascade from each order — then
+// remove the customer.
 router.delete('/:id', requireRole('admin', 'super_admin'), async (req, res) => {
   const { id } = req.params;
+  const force = req.query.force === 'true' || req.query.force === '1';
 
   const { data: existing } = await supabaseAdmin
     .from('customers').select('id, customer_name, profile_id').eq('id', id).single();
   if (!existing) return res.status(404).json({ error: 'Customer not found' });
 
-  const { count: orderCount, error: countErr } = await supabaseAdmin
-    .from('orders').select('id', { count: 'exact', head: true }).eq('customer_id', id);
-  // Treat a failed/unknown count as "has orders" so we never delete on bad data.
-  if (countErr || orderCount == null || orderCount > 0) {
+  // Load the customer's orders up front so we can report the count and log them.
+  const { data: orders, error: ordErr } = await supabaseAdmin
+    .from('orders').select('id, order_no').eq('customer_id', id);
+  // Never delete on bad data — fail safe rather than risk an orphaning delete.
+  if (ordErr) return res.status(500).json({ error: 'Could not check customer orders. Please try again.' });
+  const orderCount = orders?.length || 0;
+
+  // Require explicit confirmation before cancelling orders.
+  if (orderCount > 0 && !force) {
     return res.status(409).json({
-      error: `Cannot delete: customer has ${orderCount || 'existing'} order(s). Cancel or reassign them first.`,
+      code: 'HAS_ORDERS',
+      orderCount,
+      error: `This customer has ${orderCount} order(s) that will be cancelled if you delete them.`,
     });
+  }
+
+  // Cancel the orders first so the RESTRICT foreign key can't block the delete.
+  if (orderCount > 0) {
+    const { error: delOrdErr } = await supabaseAdmin
+      .from('orders').delete().eq('customer_id', id);
+    if (delOrdErr) return res.status(400).json({ error: 'Failed to cancel orders: ' + delOrdErr.message });
   }
 
   const { error } = await supabaseAdmin.from('customers').delete().eq('id', id);
@@ -241,9 +259,14 @@ router.delete('/:id', requireRole('admin', 'super_admin'), async (req, res) => {
 
   await logActivity({
     userId: req.user.id, action: 'delete_customer',
-    entityType: 'customer', entityId: id, details: { name: existing.customer_name }, req,
+    entityType: 'customer', entityId: id,
+    details: {
+      name: existing.customer_name,
+      cancelledOrders: orderCount,
+      orderNos: (orders || []).map(o => o.order_no),
+    }, req,
   });
-  res.json({ ok: true });
+  res.json({ ok: true, cancelledOrders: orderCount });
 });
 
 module.exports = router;
