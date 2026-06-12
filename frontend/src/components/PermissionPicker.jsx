@@ -1,6 +1,48 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 
+// Plain-language labels so non-technical admins understand each permission at a
+// glance. Falls back to the registry description, then the raw id.
+const FRIENDLY_LABELS = {
+  'activity_logs.view': 'View activity history',
+  'activity_logs.global_view': 'View activity for all branches',
+  'admins.manage': 'Add or edit admin accounts',
+  'admins.view': 'View admin accounts',
+  'branches.create': 'Add new branches',
+  'branches.delete': 'Delete branches',
+  'branches.update': 'Edit branch details',
+  'branches.view': 'View branches',
+  'customers.manage': 'Add and edit customers',
+  'customers.view': 'View customers',
+  'devices.enroll': 'Register a phone / issue QR code',
+  'devices.global_view': 'View phones in all branches',
+  'devices.locate': 'Locate a phone on demand',
+  'devices.lock': 'Lock a phone',
+  'devices.unlock': 'Unlock a phone',
+  'devices.view': 'View registered phones',
+  'installments.record_payment': 'Record customer payments',
+  'installments.view': 'View installments',
+  'inventory.manage': 'Add, edit or remove stock',
+  'inventory.view': 'View stock',
+  'orders.create': 'Create new orders',
+  'orders.update': 'Edit orders',
+  'orders.view': 'View orders',
+  'products.manage': 'Add, edit or delete products',
+  'products.view': 'View products',
+  'stats.global_view': 'View reports for all branches',
+  'stats.view': 'View reports & dashboard',
+  'roles.manage': 'Create or edit custom roles',
+  'roles.view': 'View custom roles',
+  'users.create': 'Add new users',
+  'users.disable': 'Enable or disable users',
+  'users.update': 'Edit users & reset passwords',
+  'users.view': 'View users',
+  'whatsapp.send': 'Send WhatsApp messages',
+  'whatsapp.view': 'View WhatsApp message log',
+};
+
+const friendlyLabel = (p) => FRIENDLY_LABELS[p.id] || p.description || p.id;
+
 // Module-level cache so we only hit the registry once per session.
 let REGISTRY_CACHE = null;
 let REGISTRY_PROMISE = null;
@@ -53,7 +95,7 @@ export default function PermissionPicker({ value, onChange, disabled, filter }) 
     }
     return Array.from(map.entries()).map(([category, items]) => ({
       category,
-      items: items.slice().sort((a, b) => a.id.localeCompare(b.id)),
+      items: items.slice().sort((a, b) => friendlyLabel(a).localeCompare(friendlyLabel(b))),
     }));
   }, [registry, filter]);
 
@@ -114,7 +156,8 @@ export default function PermissionPicker({ value, onChange, disabled, filter }) 
               </label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
                 {items.map(p => (
-                  <label key={p.id} className="flex items-start gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer">
+                  <label key={p.id} title={p.id}
+                    className="flex items-start gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer">
                     <input
                       type="checkbox"
                       className="mt-0.5 rounded border-slate-300"
@@ -122,10 +165,7 @@ export default function PermissionPicker({ value, onChange, disabled, filter }) 
                       onChange={() => toggle(p.id)}
                       disabled={disabled}
                     />
-                    <div className="min-w-0">
-                      <div className="text-xs font-mono text-slate-700 truncate">{p.id}</div>
-                      <div className="text-[11px] text-slate-500 truncate">{p.description}</div>
-                    </div>
+                    <span className="text-sm text-slate-700 leading-snug">{friendlyLabel(p)}</span>
                   </label>
                 ))}
               </div>

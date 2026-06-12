@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Modal from '../components/Modal';
@@ -92,6 +93,7 @@ export default function Branches() {
                 <td>{b.is_active ? <span className="badge-green">Active</span> : <span className="badge-gray">Disabled</span>}</td>
                 <td>
                   <div className="flex items-center justify-end gap-3 text-sm">
+                    <Link to={`/branches/${b.id}`} className="btn-secondary py-1 px-3 text-sm">View</Link>
                     <button onClick={() => openEdit(b)} className="text-brand-600">Edit</button>
                     <button onClick={() => toggleActive(b)} disabled={busyId === b.id} className="text-slate-600 hover:text-slate-900 disabled:opacity-50">
                       {b.is_active ? 'Disable' : 'Enable'}

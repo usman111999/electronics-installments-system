@@ -61,14 +61,20 @@ export default function CustomerPrintForm({ customer }) {
         {/* ---- Section 1: Customer Account Information ---- */}
         <table className="mb-3">
           <tbody>
-            <tr><td colSpan={6} className="sec-title">Customer Account Information</td></tr>
+            <tr><td colSpan={7} className="sec-title">Customer Account Information</td></tr>
             <tr>
-              <td className="lbl" style={{ width: '15%' }}>Account No.</td>
-              <td style={{ width: '18%' }}>{blank(customer.account_no)}</td>
-              <td className="lbl" style={{ width: '15%' }}>Date</td>
-              <td style={{ width: '18%' }}>{firstOrder ? dayjs(firstOrder.order_date).format('DD-MMM-YYYY') : '-'}</td>
-              <td className="lbl" style={{ width: '16%' }}>FOMS AccNo</td>
-              <td style={{ width: '18%' }}>0</td>
+              <td className="lbl" style={{ width: '14%' }}>Account No.</td>
+              <td style={{ width: '17%' }}>{blank(customer.account_no)}</td>
+              <td className="lbl" style={{ width: '14%' }}>Date</td>
+              <td style={{ width: '17%' }}>{firstOrder ? dayjs(firstOrder.order_date).format('DD-MMM-YYYY') : '-'}</td>
+              <td className="lbl" style={{ width: '14%' }}>FOMS AccNo</td>
+              <td style={{ width: '14%' }}>0</td>
+              <td rowSpan={7} style={{ width: '16%', padding: '4px', textAlign: 'center', verticalAlign: 'middle' }}>
+                {customer.picture_url
+                  ? <img src={customer.picture_url} alt="Customer" style={{ width: '78px', height: '96px', objectFit: 'cover', border: '1px solid #b6c0cf', borderRadius: '2px' }} />
+                  : <div style={{ width: '78px', height: '96px', margin: '0 auto', border: '1px dashed #b6c0cf', borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="muted">Photo</div>
+                }
+              </td>
             </tr>
             <tr>
               <td className="lbl">Customer</td>
@@ -95,8 +101,16 @@ export default function CustomerPrintForm({ customer }) {
               <td>{blank(customer.cnic)}</td>
             </tr>
             <tr>
+              <td className="lbl">Home Address</td>
+              <td colSpan={5} style={{ whiteSpace: 'pre-wrap' }}>{blank(customer.home_address)}</td>
+            </tr>
+            <tr>
+              <td className="lbl">Official Address</td>
+              <td colSpan={5} style={{ whiteSpace: 'pre-wrap' }}>{blank(customer.official_address)}</td>
+            </tr>
+            <tr>
               <td className="lbl">CRC Remarks</td>
-              <td colSpan={5}>{blank(customer.crc_remarks)}</td>
+              <td colSpan={5} style={{ whiteSpace: 'pre-wrap' }}>{blank(customer.crc_remarks)}</td>
             </tr>
           </tbody>
         </table>

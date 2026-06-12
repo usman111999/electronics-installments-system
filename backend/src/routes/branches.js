@@ -1,6 +1,6 @@
 const express = require('express');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission } = require('../middleware/auth');
+const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
@@ -17,6 +17,69 @@ router.get('/', async (req, res) => {
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+});
+
+// GET /branches/:id/detail - full stats + related records for one branch.
+router.get('/:id/detail', requirePermission('branches.view'), async (req, res) => {
+  const { id } = req.params;
+
+  // Branch-scoped users may only view their own branch.
+  const scope = scopeBranch(req);
+  if (scope && scope !== id) return res.status(403).json({ error: 'Forbidden — not your branch' });
+
+  const { data: branch, error: bErr } = await supabaseAdmin
+    .from('branches').select('*').eq('id', id).single();
+  if (bErr || !branch) return res.status(404).json({ error: 'Branch not found' });
+
+  const [
+    custCount, orderCount, invCount,
+    usersRes, customersRes, inventoryRes, installmentsRes,
+  ] = await Promise.all([
+    supabaseAdmin.from('customers').select('id', { count: 'exact', head: true }).eq('branch_id', id),
+    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('branch_id', id),
+    supabaseAdmin.from('inventory').select('id', { count: 'exact', head: true }).eq('branch_id', id),
+    supabaseAdmin.from('profiles')
+      .select('id, full_name, email, phone, role, is_active, created_at')
+      .eq('branch_id', id).order('role', { ascending: true }),
+    supabaseAdmin.from('customers')
+      .select('id, customer_name, account_no, phone_1, picture_url, created_at, orders(count)')
+      .eq('branch_id', id).order('created_at', { ascending: false }).limit(100),
+    supabaseAdmin.from('inventory')
+      .select('id, serial_no, status, created_at, products(name, model, company, base_price)')
+      .eq('branch_id', id).order('created_at', { ascending: false }).limit(100),
+    supabaseAdmin.from('installments')
+      .select('amount_due, amount_paid, fine, discount, status, orders!inner(branch_id)')
+      .eq('orders.branch_id', id),
+  ]);
+
+  const insts = installmentsRes.data || [];
+  let outstanding = 0, collected = 0;
+  const instByStatus = { paid: 0, pending: 0, overdue: 0, partial: 0 };
+  for (const i of insts) {
+    collected += Number(i.amount_paid || 0);
+    outstanding += Math.max(0, Number(i.amount_due || 0) + Number(i.fine || 0) - Number(i.discount || 0) - Number(i.amount_paid || 0));
+    if (instByStatus[i.status] != null) instByStatus[i.status]++;
+  }
+
+  res.json({
+    branch,
+    stats: {
+      customers: custCount.count || 0,
+      orders: orderCount.count || 0,
+      inventory_items: invCount.count || 0,
+      users: (usersRes.data || []).length,
+      installments_total: insts.length,
+      installments_paid: instByStatus.paid,
+      installments_pending: instByStatus.pending,
+      installments_partial: instByStatus.partial,
+      installments_overdue: instByStatus.overdue,
+      outstanding,
+      collected,
+    },
+    users: usersRes.data || [],
+    customers: customersRes.data || [],
+    inventory: inventoryRes.data || [],
+  });
 });
 
 router.post('/', requirePermission('branches.create'), async (req, res) => {

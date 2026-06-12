@@ -24,7 +24,7 @@ function clampDueDate(startDate, monthsAhead, requestedDay) {
 router.get('/', async (req, res) => {
   let q = supabaseAdmin
     .from('orders')
-    .select('*, customers(id, customer_name, account_no, phone_1), products(id, name, model), branches(id, name)')
+    .select('*, customers(id, customer_name, account_no, phone_1, picture_url), products(id, name, model), branches(id, name)')
     .order('created_at', { ascending: false });
 
   if (req.user.role === 'customer') {

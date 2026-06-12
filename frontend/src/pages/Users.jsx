@@ -44,6 +44,8 @@ export default function Users() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [err, setErr] = useState('');
   const [filter, setFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
+  const [search, setSearch] = useState('');
   const [showOverrides, setShowOverrides] = useState(false);
   const [overrides, setOverrides] = useState([]);
 
@@ -62,6 +64,21 @@ export default function Users() {
     }
   };
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [filter]);
+
+  // Branch + free-text filtering is applied client-side on top of the
+  // server-side role filter (the list is small).
+  const displayed = useMemo(() => {
+    let r = list;
+    if (branchFilter === 'none') r = r.filter(u => !u.branch_id);
+    else if (branchFilter) r = r.filter(u => u.branch_id === branchFilter);
+    const s = search.trim().toLowerCase();
+    if (s) r = r.filter(u =>
+      (u.full_name || '').toLowerCase().includes(s) ||
+      (u.email || '').toLowerCase().includes(s) ||
+      (u.phone || '').toLowerCase().includes(s)
+    );
+    return r;
+  }, [list, branchFilter, search]);
 
   const closeModal = () => {
     setOpen(false);
@@ -137,12 +154,19 @@ export default function Users() {
       <PageHeader title="Users" subtitle="Admins, branch operators, and customers"
         actions={
           <>
+            <input className="input !w-auto" placeholder="Search name / email / phone"
+              value={search} onChange={e => setSearch(e.target.value)} />
             <select className="input !w-auto" value={filter} onChange={e => setFilter(e.target.value)}>
               <option value="">All roles</option>
               {isSuper && <option value="super_admin">Super Admin</option>}
               <option value="admin">Admin</option>
               <option value="operator">Operator</option>
               <option value="customer">Customer</option>
+            </select>
+            <select className="input !w-auto" value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
+              <option value="">All branches</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              <option value="none">— No branch —</option>
             </select>
             {hasPermission('users.create') && (
               <button className="btn-primary" onClick={() => { setEditing(null); setForm({ role: grantableBuiltins[0]?.value || 'operator', role_id: '' }); setOpen(true); setErr(''); }}>+ Add User</button>
@@ -154,7 +178,7 @@ export default function Users() {
         <table className="table-base">
           <thead><tr><th>Name</th><th>Email</th><th>Password</th><th>Role</th><th>Branch</th><th>Phone</th><th>Status</th><th></th></tr></thead>
           <tbody>
-            {list.map(u => (
+            {displayed.map(u => (
               <tr key={u.id}>
                 <td className="font-medium">{u.full_name || '-'}</td>
                 <td>{u.email}</td>
@@ -165,7 +189,13 @@ export default function Users() {
                   </span>
                   {u.role_name && <div className="text-[11px] text-slate-500 mt-0.5">{u.role_name}</div>}
                 </td>
-                <td>{u.branches?.name || '-'}</td>
+                <td>
+                  {u.branches?.name
+                    ? <span className="badge-blue">{u.branches.name}</span>
+                    : (u.role === 'admin' || u.role === 'super_admin')
+                      ? <span className="text-xs text-slate-400">All branches</span>
+                      : <span className="text-xs text-amber-600" title="This user has no branch assigned — they can see all branches' data. Edit to assign one.">⚠ No branch</span>}
+                </td>
                 <td>{u.phone || '-'}</td>
                 <td>{u.is_active ? <span className="badge-green">Active</span> : <span className="badge-gray">Disabled</span>}</td>
                 <td className="space-x-3 whitespace-nowrap">
@@ -174,12 +204,21 @@ export default function Users() {
                   )}
                   {hasPermission('users.update') && <button onClick={() => openReset(u)} className="text-brand-600 text-sm">Reset Password</button>}
                   {hasPermission('users.disable') && u.role !== 'super_admin' && (
-                    <button onClick={() => toggleActive(u)} className="text-slate-600 text-sm">{u.is_active ? 'Disable' : 'Enable'}</button>
+                    <button onClick={() => toggleActive(u)}
+                      className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs font-medium border transition-colors ${
+                        u.is_active
+                          ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                      }`}>
+                      {u.is_active
+                        ? <><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Disable</>
+                        : <><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg> Enable</>}
+                    </button>
                   )}
                 </td>
               </tr>
             ))}
-            {list.length === 0 && <tr><td colSpan="8" className="text-center text-slate-400 py-8">No users</td></tr>}
+            {displayed.length === 0 && <tr><td colSpan="8" className="text-center text-slate-400 py-8">{list.length === 0 ? 'No users' : 'No users match these filters'}</td></tr>}
           </tbody>
         </table>
       </div>

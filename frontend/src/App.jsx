@@ -6,6 +6,7 @@ import { useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Branches from './pages/Branches';
+import BranchDetail from './pages/BranchDetail';
 import Users from './pages/Users';
 import Roles from './pages/Roles';
 import Products from './pages/Products';
@@ -46,6 +47,7 @@ export default function App() {
       <Route element={<ProtectedRoute roles={['super_admin', 'admin', 'operator']}><Layout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<ProtectedRoute permission="stats.view"><Dashboard /></ProtectedRoute>} />
         <Route path="/branches" element={<ProtectedRoute permission="branches.view"><Branches /></ProtectedRoute>} />
+        <Route path="/branches/:id" element={<ProtectedRoute permission="branches.view"><BranchDetail /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute permission="users.view"><Users /></ProtectedRoute>} />
         <Route path="/roles" element={<ProtectedRoute permission="roles.view"><Roles /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute permission="products.view"><Products /></ProtectedRoute>} />

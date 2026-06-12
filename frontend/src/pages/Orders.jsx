@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import { api } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Modal from '../components/Modal';
+import Avatar from '../components/Avatar';
 import { useAuth } from '../context/AuthContext';
 
 const fmt = (n) => `Rs. ${Number(n || 0).toLocaleString()}`;
@@ -91,7 +92,12 @@ export default function Orders() {
               <tr key={o.id}>
                 <td className="font-medium">{o.order_no}</td>
                 <td>{dayjs(o.order_date).format('DD MMM YYYY')}</td>
-                <td>{o.customers?.customer_name} <span className="text-xs text-slate-400">#{o.customers?.account_no}</span></td>
+                <td>
+                  <div className="flex items-center gap-2.5">
+                    <Avatar src={o.customers?.picture_url} name={o.customers?.customer_name} size={32} />
+                    <span>{o.customers?.customer_name} <span className="text-xs text-slate-400">#{o.customers?.account_no}</span></span>
+                  </div>
+                </td>
                 <td>{o.product_name_snapshot || '-'}</td>
                 <td>{fmt(o.total_price)}</td>
                 <td>{o.total_installments} × {fmt(o.installment_amount)}</td>

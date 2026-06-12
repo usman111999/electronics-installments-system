@@ -5,6 +5,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { api } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import StatCard from '../components/StatCard';
+import Avatar from '../components/Avatar';
 
 dayjs.extend(relativeTime);
 
@@ -31,20 +32,25 @@ function outstandingOf(i) {
   return Number(i.amount_due || 0) + Number(i.fine || 0) - Number(i.discount || 0) - Number(i.amount_paid || 0);
 }
 
-/** Reduce flat installments list into per-customer summary rows. */
-function groupByCustomer(installments) {
-  const byCustomer = new Map();
+/** Reduce flat installments list into per-order summary rows. */
+function groupByOrder(installments) {
+  const byOrder = new Map();
   for (const i of installments) {
-    const customer = i?.orders?.customers;
-    if (!customer?.id) continue;
-    let row = byCustomer.get(customer.id);
+    const order = i?.orders;
+    const customer = order?.customers;
+    if (!order?.id) continue;
+    let row = byOrder.get(order.id);
     if (!row) {
       row = {
-        customer_id: customer.id,
-        customer_name: customer.customer_name || '—',
-        account_no: customer.account_no || '',
-        phone_1: customer.phone_1 || '',
-        branch_name: i?.orders?.branches?.name || customer.branches?.name || '',
+        order_id: order.id,
+        order_no: order.order_no || '',
+        customer_id: customer?.id || null,
+        customer_name: customer?.customer_name || '—',
+        account_no: customer?.account_no || '',
+        phone_1: customer?.phone_1 || '',
+        picture_url: customer?.picture_url || '',
+        branch_name: order?.branches?.name || customer?.branches?.name || '',
+        planned: Number(order.total_installments || 0),
         total: 0,
         paid_count: 0,
         pending_count: 0,
@@ -55,19 +61,13 @@ function groupByCustomer(installments) {
         total_outstanding: 0,
         next_due_date: null,
         worst_status: 'paid',
-        order_ids: new Set(),
-        planned_by_order: {},
       };
-      byCustomer.set(customer.id, row);
+      byOrder.set(order.id, row);
     }
-    // Track each order's full plan length once, so "paid / total" reflects the
-    // whole plan even though invoices are created one at a time (rolling model).
-    if (i?.orders?.id) row.planned_by_order[i.orders.id] = Number(i.orders.total_installments || 0);
     row.total += 1;
     row.total_due  += Number(i.amount_due || 0);
     row.total_paid += Number(i.amount_paid || 0);
     row.total_outstanding += Math.max(0, outstandingOf(i));
-    if (i.orders?.id) row.order_ids.add(i.orders.id);
 
     if (i.status === 'paid')    row.paid_count++;
     else if (i.status === 'overdue') row.overdue_count++;
@@ -83,13 +83,8 @@ function groupByCustomer(installments) {
       row.worst_status = i.status;
     }
   }
-  return Array.from(byCustomer.values()).map(r => ({
-    ...r,
-    order_count: r.order_ids.size,
-    // Full planned installments across the customer's orders (fallback to the
-    // number created so far if a plan length is missing).
-    planned: Object.values(r.planned_by_order).reduce((s, n) => s + n, 0) || r.total,
-  }));
+  // Full plan length per order; fall back to invoices created so far.
+  return Array.from(byOrder.values()).map(r => ({ ...r, planned: r.planned || r.total }));
 }
 
 export default function Installments() {
@@ -120,7 +115,7 @@ export default function Installments() {
     return () => { alive = false; };
   }, []);
 
-  const rows = useMemo(() => groupByCustomer(raw), [raw]);
+  const rows = useMemo(() => groupByOrder(raw), [raw]);
 
   // Top-level KPIs
   const stats = useMemo(() => {
@@ -131,7 +126,7 @@ export default function Installments() {
       else if (i.status === 'paid' && i.amount_paid > 0 && i.due_date && dayjs(i.due_date).isAfter(startOfMonth)) paid_this_month++;
     }
     return {
-      customers: rows.length,
+      orders: rows.length,
       overdue:   rows.filter(r => r.overdue_count > 0).length,
       outstanding: rows.reduce((sum, r) => sum + r.total_outstanding, 0),
       paid_this_month,
@@ -146,7 +141,8 @@ export default function Installments() {
     if (search) {
       r = r.filter(x =>
         (x.customer_name || '').toLowerCase().includes(search) ||
-        (x.account_no    || '').toLowerCase().includes(search)
+        (x.account_no    || '').toLowerCase().includes(search) ||
+        (x.order_no      || '').toLowerCase().includes(search)
       );
     }
     // Sort: overdue first, then by outstanding desc, then by name.
@@ -159,11 +155,11 @@ export default function Installments() {
 
   return (
     <div className="p-6">
-      <PageHeader title="Installments" subtitle="One row per customer — click to see their full schedule" />
+      <PageHeader title="Installments" subtitle="One row per order — click to open the order and record payments" />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <StatCard label="Customers" value={stats.customers} accent="brand"
+        <StatCard label="Orders" value={stats.orders} accent="brand"
           icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>} />
         <StatCard label="With Overdue" value={stats.overdue} accent="red"
           icon={<svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/></svg>} />
@@ -201,28 +197,35 @@ export default function Installments() {
           <thead>
             <tr>
               <th>Customer</th>
+              <th>Order</th>
               <th>Branch</th>
               <th>Installments</th>
               <th>Outstanding</th>
               <th>Next Due</th>
               <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan="6" className="text-center text-slate-400 py-8">Loading…</td></tr>}
+            {loading && <tr><td colSpan="8" className="text-center text-slate-400 py-8">Loading…</td></tr>}
             {!loading && filtered.map(r => {
               const overdueDays = r.next_due_date && r.overdue_count > 0
                 ? dayjs().diff(dayjs(r.next_due_date), 'day')
                 : 0;
+              const fullyPaid = r.paid_count >= r.planned && r.planned > 0;
               return (
-                <tr key={r.customer_id} className="cursor-pointer"
-                  onClick={() => navigate(`/customers/${r.customer_id}`)}>
+                <tr key={r.order_id} className="cursor-pointer"
+                  onClick={() => navigate(`/orders/${r.order_id}`)}>
                   <td>
-                    <div className="font-medium text-slate-900">{r.customer_name}</div>
-                    <div className="text-xs text-slate-500">
-                      {r.account_no ? `#${r.account_no}` : ''}{r.order_count > 1 ? ` · ${r.order_count} orders` : ''}
+                    <div className="flex items-center gap-2.5">
+                      <Avatar src={r.picture_url} name={r.customer_name} size={36} />
+                      <div>
+                        <div className="font-medium text-slate-900">{r.customer_name}</div>
+                        <div className="text-xs text-slate-500">{r.account_no ? `#${r.account_no}` : ''}</div>
+                      </div>
                     </div>
                   </td>
+                  <td className="text-sm font-medium text-slate-700">{r.order_no || '—'}</td>
                   <td className="text-sm text-slate-600">{r.branch_name || '—'}</td>
                   <td>
                     <div className="text-sm font-medium text-slate-900">{r.paid_count}/{r.planned} paid</div>
@@ -245,19 +248,26 @@ export default function Installments() {
                     ) : <span className="text-slate-400">—</span>}
                   </td>
                   <td>
-                    <span className={(r.paid_count >= r.planned && r.planned > 0) ? 'badge-green' : (WORST_PILL[r.worst_status] || 'badge-gray')}>
-                      {(r.paid_count >= r.planned && r.planned > 0) ? 'Fully Paid' :
+                    <span className={fullyPaid ? 'badge-green' : (WORST_PILL[r.worst_status] || 'badge-gray')}>
+                      {fullyPaid ? 'Fully Paid' :
                        r.worst_status === 'overdue' ? 'Overdue' :
                        r.worst_status === 'partial' ? 'Partial' :
                        r.worst_status === 'pending' ? 'Pending' : 'In progress'}
                     </span>
                   </td>
+                  <td onClick={e => e.stopPropagation()}>
+                    {!fullyPaid && (
+                      <button onClick={() => navigate(`/orders/${r.order_id}`)} className="btn-primary py-1 px-3 text-sm">
+                        Pay
+                      </button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan="6" className="text-center text-slate-400 py-10">
-                {rows.length === 0 ? 'No installments yet. Create an order for a customer to start their plan — invoices then open one month at a time.' : 'No customers match these filters.'}
+              <tr><td colSpan="8" className="text-center text-slate-400 py-10">
+                {rows.length === 0 ? 'No installments yet. Create an order for a customer to start their plan — invoices then open one month at a time.' : 'No orders match these filters.'}
               </td></tr>
             )}
           </tbody>

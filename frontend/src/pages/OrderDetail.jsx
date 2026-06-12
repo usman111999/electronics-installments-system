@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import Modal from '../components/Modal';
 import DeviceCard from '../components/DeviceCard';
+import Avatar from '../components/Avatar';
 
 const fmt = (n) => `Rs. ${Number(n || 0).toLocaleString()}`;
 const statusClass = {
@@ -93,8 +94,13 @@ export default function OrderDetail() {
 
   return (
     <div className="p-6">
-      <PageHeader title={`Order ${order.order_no}`} subtitle={`${order.customers?.customer_name} · ${order.product_name_snapshot || ''}`}
-        actions={<Link to="/orders" className="btn-secondary">← Back</Link>} />
+      <div className="flex items-center gap-3">
+        <Avatar src={order.customers?.picture_url} name={order.customers?.customer_name} size={48} />
+        <div className="flex-1">
+          <PageHeader title={`Order ${order.order_no}`} subtitle={`${order.customers?.customer_name} · ${order.product_name_snapshot || ''}`}
+            actions={<Link to="/orders" className="btn-secondary">← Back</Link>} />
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
         <div className="card"><div className="text-xs uppercase text-slate-500">Total Price</div><div className="text-2xl font-bold">{fmt(order.total_price)}</div>{discount > 0 && <div className="text-xs text-slate-400">less discount {fmt(discount)}</div>}</div>

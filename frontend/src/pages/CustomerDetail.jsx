@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api } from '../api/client';
@@ -9,17 +9,61 @@ import OrderForm from '../components/OrderForm';
 
 const fmt = (n) => `Rs. ${Number(n || 0).toLocaleString()}`;
 
+const INST_STATUS_PILL = {
+  paid:    'badge-green',
+  overdue: 'badge-red',
+  partial: 'badge-blue',
+  pending: 'badge-yellow',
+};
+
+const INST_FILTERS = [
+  { value: 'all',     label: 'All' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'partial', label: 'Partial' },
+  { value: 'paid',    label: 'Paid' },
+];
+
+const remainingOf = (i) =>
+  Math.max(0, Number(i.amount_due || 0) + Number(i.fine || 0) - Number(i.discount || 0) - Number(i.amount_paid || 0));
+
 export default function CustomerDetail() {
   const { id } = useParams();
   const [customer, setCustomer] = useState(null);
   const [showPrint, setShowPrint] = useState(false);
   const [orderOpen, setOrderOpen] = useState(false);
+  const [instFilter, setInstFilter] = useState('all');
 
   const load = async () => {
     const { data } = await api.get(`/customers/${id}`);
     setCustomer(data);
   };
   useEffect(() => { load(); }, [id]);
+
+  // Flatten every installment across the customer's orders into one list,
+  // tagging each with its order so we can link back to where payment happens.
+  const allInstallments = useMemo(() => {
+    const list = [];
+    for (const o of customer?.orders || []) {
+      for (const i of o.installments || []) {
+        list.push({ ...i, order_id: o.id, order_no: o.order_no });
+      }
+    }
+    return list.sort((a, b) => {
+      const d = dayjs(a.due_date).valueOf() - dayjs(b.due_date).valueOf();
+      return d !== 0 ? d : (a.installment_no || 0) - (b.installment_no || 0);
+    });
+  }, [customer]);
+
+  const instCounts = useMemo(() => {
+    const m = {};
+    for (const i of allInstallments) m[i.status] = (m[i.status] || 0) + 1;
+    return m;
+  }, [allInstallments]);
+
+  const visibleInstallments = instFilter === 'all'
+    ? allInstallments
+    : allInstallments.filter(i => i.status === instFilter);
 
   if (!customer) return <div className="p-8 text-slate-500">Loading…</div>;
 
@@ -62,7 +106,15 @@ export default function CustomerDetail() {
             <div className="flex justify-between"><dt className="text-slate-500">Phone 2</dt><dd>{customer.phone_2 || '-'}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-500">Occupation</dt><dd>{customer.occupation || '-'}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-500">Income</dt><dd>{customer.monthly_income ? fmt(customer.monthly_income) : '-'}</dd></div>
-            {customer.crc_remarks && <div><dt className="text-slate-500">CRC Remarks</dt><dd className="mt-1">{customer.crc_remarks}</dd></div>}
+            <div className="pt-2 border-t border-slate-100">
+              <dt className="text-slate-500 mb-0.5">🏠 Home Address</dt>
+              <dd className="text-slate-900 whitespace-pre-wrap break-words">{customer.home_address || '-'}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500 mb-0.5">🏢 Official Address</dt>
+              <dd className="text-slate-900 whitespace-pre-wrap break-words">{customer.official_address || '-'}</dd>
+            </div>
+            {customer.crc_remarks && <div className="pt-2 border-t border-slate-100"><dt className="text-slate-500 mb-0.5">CRC Remarks</dt><dd className="whitespace-pre-wrap break-words">{customer.crc_remarks}</dd></div>}
           </dl>
         </div>
 
@@ -107,6 +159,53 @@ export default function CustomerDetail() {
                   ))}
                 </tbody>
               </table>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h3 className="font-semibold">Installments ({allInstallments.length})</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {INST_FILTERS.map(f => {
+                  const n = f.value === 'all' ? allInstallments.length : (instCounts[f.value] || 0);
+                  return (
+                    <button key={f.value} type="button" onClick={() => setInstFilter(f.value)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        instFilter === f.value
+                          ? 'bg-brand-600 text-white border-brand-600'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      }`}>
+                      {f.label} <span className={instFilter === f.value ? 'text-white/80' : 'text-slate-400'}>({n})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {allInstallments.length === 0 ? (
+              <p className="text-sm text-slate-400">No installments yet. Create an order to start a plan — invoices then open one month at a time.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table-base">
+                  <thead><tr><th>Order</th><th>#</th><th>Due</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+                  <tbody>
+                    {visibleInstallments.map(i => (
+                      <tr key={i.id}>
+                        <td><Link to={`/orders/${i.order_id}`} className="text-brand-600">{i.order_no}</Link></td>
+                        <td>{i.installment_no}</td>
+                        <td>{dayjs(i.due_date).format('DD MMM YYYY')}</td>
+                        <td>{fmt(i.amount_due)}</td>
+                        <td>{fmt(i.amount_paid)}</td>
+                        <td>{fmt(remainingOf(i))}</td>
+                        <td><span className={INST_STATUS_PILL[i.status] || 'badge-gray'}>{i.status}</span></td>
+                        <td>{i.status !== 'paid' && <Link to={`/orders/${i.order_id}`} className="text-brand-600 text-sm">Pay →</Link>}</td>
+                      </tr>
+                    ))}
+                    {visibleInstallments.length === 0 && (
+                      <tr><td colSpan="8" className="text-center text-slate-400 py-8">No {instFilter !== 'all' ? instFilter : ''} installments</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
