@@ -34,6 +34,13 @@ router.get('/', requirePermission('users.view'), async (req, res) => {
     if (req.user.branch_id) q = q.eq('branch_id', req.user.branch_id);
   }
 
+  // super_admin accounts are invisible to everyone but a super_admin — the row
+  // is never returned, so no name, details, or password can leak to admins,
+  // operators, or any custom role.
+  if (req.user.role !== 'super_admin') {
+    q = q.neq('role', 'super_admin');
+  }
+
   if (req.query.role) q = q.eq('role', req.query.role);
 
   const { data, error } = await q;
@@ -122,10 +129,15 @@ router.patch('/:id', requirePermission('users.update'), async (req, res) => {
   const { id } = req.params;
   const { full_name, phone, is_active, branch_id, role, password, role_id, permissions } = req.body || {};
 
-  if (req.user.role === 'operator') {
+  // Only a super_admin may modify a super_admin account, and operators may only
+  // edit customers in their own branch. One target lookup covers both checks.
+  if (req.user.role !== 'super_admin') {
     const { data: target } = await supabaseAdmin
       .from('profiles').select('role, branch_id').eq('id', id).single();
-    if (!target || target.role !== 'customer' || target.branch_id !== req.user.branch_id) {
+    if (target?.role === 'super_admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (req.user.role === 'operator' && (!target || target.role !== 'customer' || target.branch_id !== req.user.branch_id)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
   }
@@ -180,6 +192,11 @@ router.patch('/:id', requirePermission('users.update'), async (req, res) => {
 
 router.delete('/:id', requirePermission('users.disable'), async (req, res) => {
   const { id } = req.params;
+  // A super_admin account can only be disabled by another super_admin.
+  if (req.user.role !== 'super_admin') {
+    const { data: target } = await supabaseAdmin.from('profiles').select('role').eq('id', id).single();
+    if (target?.role === 'super_admin') return res.status(403).json({ error: 'Forbidden' });
+  }
   await supabaseAdmin.from('profiles').update({ is_active: false }).eq('id', id);
   await supabaseAdmin.auth.admin.updateUserById(id, { ban_duration: '876000h' });
   invalidateAll();
