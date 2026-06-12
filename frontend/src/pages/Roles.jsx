@@ -160,8 +160,7 @@ export default function Roles() {
           <thead>
             <tr>
               <th>Name</th>
-              <th>Slug</th>
-              <th>Base role</th>
+              <th>Role type</th>
               <th>Branch</th>
               <th>Permissions</th>
               <th>Created</th>
@@ -169,7 +168,7 @@ export default function Roles() {
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan="7" className="text-center text-slate-400 py-8">Loading…</td></tr>}
+            {loading && <tr><td colSpan="6" className="text-center text-slate-400 py-8">Loading…</td></tr>}
             {!loading && sorted.map(r => (
               <tr key={r.id}>
                 <td className="font-medium">
@@ -177,7 +176,6 @@ export default function Roles() {
                   {r.is_system && <span className="ml-2 badge-gray">system</span>}
                   {r.description && <div className="text-[11px] text-slate-500 mt-0.5">{r.description}</div>}
                 </td>
-                <td className="font-mono text-xs">{r.slug}</td>
                 <td><span className="badge-blue">{r.base_role}</span></td>
                 <td>{r.branches?.name || r.branch?.name || (r.branch_id ? r.branch_id : <span className="text-slate-400">global</span>)}</td>
                 <td>{permCount(r)}</td>
@@ -195,7 +193,7 @@ export default function Roles() {
               </tr>
             ))}
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan="7" className="text-center text-slate-400 py-8">No roles yet.</td></tr>
+              <tr><td colSpan="6" className="text-center text-slate-400 py-8">No roles yet.</td></tr>
             )}
           </tbody>
         </table>
@@ -206,30 +204,23 @@ export default function Roles() {
           {err && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">{err}</div>}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Name *</label>
+              <label className="label">Role name *</label>
               <input className="input" required value={form.name}
+                placeholder="e.g. Branch Cashier"
                 onChange={e => {
                   const name = e.target.value;
-                  setForm(f => ({
-                    ...f,
-                    name,
-                    slug: slugManuallyEdited ? f.slug : slugify(name),
-                  }));
+                  setForm(f => ({ ...f, name, slug: slugify(name) }));
                 }} />
             </div>
             <div>
-              <label className="label">Slug *</label>
-              <input className="input font-mono" required value={form.slug}
-                onChange={e => { setForm(f => ({ ...f, slug: e.target.value })); setSlugManuallyEdited(true); }} />
-            </div>
-            <div>
-              <label className="label">Base role *</label>
+              <label className="label">Role type *</label>
               <select className="input" value={form.base_role}
                 onChange={e => setForm(f => ({ ...f, base_role: e.target.value }))}>
-                {isSuper && <option value="admin">Admin</option>}
-                <option value="operator">Operator</option>
-                <option value="customer">Customer</option>
+                {isSuper && <option value="admin">Admin — full company access</option>}
+                <option value="operator">Operator — staff for one branch</option>
+                <option value="customer">Customer — end customer</option>
               </select>
+              <div className="text-[11px] text-slate-500 mt-1">Sets the base access level this role starts from. You then tick exactly what they can do below.</div>
             </div>
             {isSuper && (
               <div>
@@ -244,6 +235,7 @@ export default function Roles() {
             <div className="col-span-2">
               <label className="label">Description</label>
               <textarea className="input" rows="2" value={form.description}
+                placeholder="e.g. Can record payments and view customers for their branch"
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
           </div>
