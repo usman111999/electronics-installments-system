@@ -112,12 +112,12 @@ export default function Branches() {
         <form onSubmit={submit} className="space-y-3">
           {err && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">{err}</div>}
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">Name *</label><input className="input" required value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}/></div>
-            <div><label className="label">Code</label><input className="input" value={form.code || ''} onChange={e => setForm(f => ({ ...f, code: e.target.value }))}/></div>
-            <div><label className="label">City</label><input className="input" value={form.city || ''} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}/></div>
-            <div><label className="label">Phone</label><input className="input" value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}/></div>
-            <div className="col-span-2"><label className="label">Address</label><textarea className="input" value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}/></div>
-            <div><label className="label">Manager Name</label><input className="input" value={form.manager_name || ''} onChange={e => setForm(f => ({ ...f, manager_name: e.target.value }))}/></div>
+            <div><label className="label">Name *</label><input className="input" required placeholder="e.g. Sialkot Main Branch" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}/></div>
+            <div><label className="label">Code</label><input className="input" placeholder="e.g. 03" value={form.code || ''} onChange={e => setForm(f => ({ ...f, code: e.target.value }))}/></div>
+            <div><label className="label">City</label><input className="input" placeholder="e.g. Sialkot" value={form.city || ''} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}/></div>
+            <div><label className="label">Phone</label><input className="input" placeholder="e.g. 052-1234567" value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}/></div>
+            <div className="col-span-2"><label className="label">Address</label><textarea className="input" placeholder="e.g. 1st Floor, City Plaza, Kutchery Road, Sialkot" value={form.address || ''} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}/></div>
+            <div><label className="label">Manager Name</label><input className="input" placeholder="e.g. Usman Ali" value={form.manager_name || ''} onChange={e => setForm(f => ({ ...f, manager_name: e.target.value }))}/></div>
             <div>
               <label className="label">Auto-lock after (days overdue)</label>
               <input className="input" type="number" min="1" placeholder="blank = manual only"

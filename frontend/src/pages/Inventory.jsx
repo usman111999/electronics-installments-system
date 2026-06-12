@@ -90,7 +90,7 @@ export default function Inventory() {
               </select>
             </div>
             <div><label className="label">Serial / IMEI No. <span className="font-normal text-slate-400">(optional, recommended)</span></label><input className="input" placeholder="helps track each unit" value={form.serial_no || ''} onChange={e => setForm(f => ({ ...f, serial_no: e.target.value }))}/></div>
-            <div><label className="label">Cost Price</label><input type="number" step="0.01" className="input" value={form.cost_price || ''} onChange={e => setForm(f => ({ ...f, cost_price: e.target.value }))}/></div>
+            <div><label className="label">Cost Price</label><input type="number" step="0.01" className="input" placeholder="e.g. 72000" value={form.cost_price || ''} onChange={e => setForm(f => ({ ...f, cost_price: e.target.value }))}/></div>
             {user?.role === 'admin' && (
               <div><label className="label">Branch *</label>
                 <select required className="input" value={form.branch_id || ''} onChange={e => setForm(f => ({ ...f, branch_id: e.target.value }))}>
@@ -107,7 +107,7 @@ export default function Inventory() {
               </select>
               <p className="text-xs text-slate-500 mt-1">Changes to “Sold” automatically when used in an order.</p>
             </div>
-            <div className="col-span-2"><label className="label">Notes</label><textarea className="input" value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}/></div>
+            <div className="col-span-2"><label className="label">Notes</label><textarea className="input" placeholder="e.g. Received in good condition" value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}/></div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={() => setOpen(false)} className="btn-secondary">Cancel</button>

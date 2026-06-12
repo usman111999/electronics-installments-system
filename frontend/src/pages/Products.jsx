@@ -128,9 +128,9 @@ export default function Products() {
           {err && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">{err}</div>}
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><ImageUpload value={form.image_url || ''} onChange={(url) => setForm(f => ({ ...f, image_url: url }))} bucket="product-images" label="Product Image" /></div>
-            <div><label className="label">Name *</label><input required className="input" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}/></div>
-            <div><label className="label">Model</label><input className="input" value={form.model || ''} onChange={e => setForm(f => ({ ...f, model: e.target.value }))}/></div>
-            <div><label className="label">Company</label><input className="input" value={form.company || ''} onChange={e => setForm(f => ({ ...f, company: e.target.value }))}/></div>
+            <div><label className="label">Name *</label><input required className="input" placeholder="e.g. LED TV" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}/></div>
+            <div><label className="label">Model</label><input className="input" placeholder="e.g. 43U7K" value={form.model || ''} onChange={e => setForm(f => ({ ...f, model: e.target.value }))}/></div>
+            <div><label className="label">Company</label><input className="input" placeholder="e.g. Haier" value={form.company || ''} onChange={e => setForm(f => ({ ...f, company: e.target.value }))}/></div>
             <div><label className="label">Category</label>
               <input className="input" list="product-categories" placeholder="Mobile, LED TV, Laptop…" value={form.category || ''} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}/>
               <datalist id="product-categories">
@@ -138,11 +138,11 @@ export default function Products() {
               </datalist>
               <p className="text-xs text-slate-500 mt-1">Start typing to pick a suggestion, or type your own.</p>
             </div>
-            <div><label className="label">Base Price *</label><input type="number" step="0.01" required className="input" value={form.base_price ?? ''} onChange={e => setForm(f => ({ ...f, base_price: e.target.value }))}/></div>
+            <div><label className="label">Base Price *</label><input type="number" step="0.01" required className="input" placeholder="e.g. 85000" value={form.base_price ?? ''} onChange={e => setForm(f => ({ ...f, base_price: e.target.value }))}/></div>
             <div><label className="label">Default Monthly Installment (Rs.)</label><input type="number" step="0.01" className="input" placeholder="optional suggestion" value={form.default_installment_price ?? ''} onChange={e => setForm(f => ({ ...f, default_installment_price: e.target.value }))}/></div>
             <div><label className="label">Discount %</label><input type="number" step="0.01" min="0" max="100" className="input" value={form.discount_percent ?? ''} onChange={e => setForm(f => ({ ...f, discount_percent: e.target.value }))}/></div>
             <div><label className="label">Discount Label</label><input className="input" placeholder="e.g. Eid sale" value={form.discount_label || ''} onChange={e => setForm(f => ({ ...f, discount_label: e.target.value }))}/></div>
-            <div className="col-span-2"><label className="label">Description</label><textarea className="input" value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}/></div>
+            <div className="col-span-2"><label className="label">Description</label><textarea className="input" placeholder="e.g. 43-inch 4K Smart LED TV" value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}/></div>
           </div>
           {!edit && <p className="text-xs text-slate-500">After saving, use “+ Stock” on the product to add units to your inventory.</p>}
           <div className="flex justify-end gap-2 pt-2">
@@ -157,9 +157,9 @@ export default function Products() {
         <form onSubmit={submitStock} className="space-y-3">
           {serr && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">{serr}</div>}
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">Quantity</label><input type="number" min="1" className="input" value={sform.quantity} disabled={!!sform.serial} onChange={e => setSform(f => ({ ...f, quantity: e.target.value }))}/></div>
+            <div><label className="label">Quantity</label><input type="number" min="1" className="input" placeholder="e.g. 10" value={sform.quantity} disabled={!!sform.serial} onChange={e => setSform(f => ({ ...f, quantity: e.target.value }))}/></div>
             <div><label className="label">Serial / IMEI <span className="font-normal text-slate-400">(optional)</span></label><input className="input" placeholder="one unit" value={sform.serial || ''} onChange={e => setSform(f => ({ ...f, serial: e.target.value }))}/></div>
-            <div><label className="label">Cost Price (Rs.)</label><input type="number" step="0.01" className="input" value={sform.cost_price || ''} onChange={e => setSform(f => ({ ...f, cost_price: e.target.value }))}/></div>
+            <div><label className="label">Cost Price (Rs.)</label><input type="number" step="0.01" className="input" placeholder="e.g. 72000" value={sform.cost_price || ''} onChange={e => setSform(f => ({ ...f, cost_price: e.target.value }))}/></div>
             {isAdmin && (
               <div><label className="label">Branch *</label>
                 <select required className="input" value={sform.branch_id || ''} onChange={e => setSform(f => ({ ...f, branch_id: e.target.value }))}>

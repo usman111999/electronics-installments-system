@@ -231,16 +231,16 @@ export default function Users() {
           {editing && isEditingPasswordOnly ? (
             <div>
               <label className="label">New Password *</label>
-              <input type="text" className="input font-mono" required value={form.password || ''} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} autoFocus />
+              <input type="text" className="input font-mono" placeholder="e.g. Set a strong password" required value={form.password || ''} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} autoFocus />
               <p className="text-xs text-slate-500 mt-2">Visible to admin/operator. The user can sign in with this password immediately.</p>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="label">Full Name *</label><input className="input" required value={form.full_name || ''} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}/></div>
-                <div><label className="label">Email *</label><input type="email" className="input" required disabled={!!editing} value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}/></div>
-                {!editing && <div><label className="label">Password *</label><input type="text" className="input font-mono" required value={form.password || ''} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}/></div>}
-                <div><label className="label">Phone</label><input className="input" value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}/></div>
+                <div><label className="label">Full Name *</label><input className="input" placeholder="e.g. Ahmed Raza" required value={form.full_name || ''} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}/></div>
+                <div><label className="label">Email *</label><input type="email" className="input" placeholder="e.g. ahmed@example.com" required disabled={!!editing} value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}/></div>
+                {!editing && <div><label className="label">Password *</label><input type="text" className="input font-mono" placeholder="e.g. Set a strong password" required value={form.password || ''} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}/></div>}
+                <div><label className="label">Phone</label><input className="input" placeholder="e.g. 0300-1234567" value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}/></div>
                 <div><label className="label">Role *</label>
                   <select className="input" value={form.role}
                     onChange={e => setForm(f => ({ ...f, role: e.target.value, role_id: '' }))}>

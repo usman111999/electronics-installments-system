@@ -169,18 +169,18 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
             <div className="sm:col-span-1 sm:row-span-3">
               <ImageUpload value={form.picture_url || ''} onChange={(url) => setC('picture_url', url)} bucket="customer-pictures" label="Customer Picture" />
             </div>
-            <div><label className="label">Customer Name *</label><input required className="input" value={form.customer_name || ''} onChange={e => setC('customer_name', e.target.value)} /></div>
-            <div><label className="label">Father / Husband</label><input className="input" value={form.father_husband_name || ''} onChange={e => setC('father_husband_name', e.target.value)} /></div>
-            <div><label className="label">CNIC</label><input className="input" value={form.cnic || ''} onChange={e => setC('cnic', e.target.value)} /></div>
+            <div><label className="label">Customer Name *</label><input required className="input" placeholder="e.g. Muhammad Imran" value={form.customer_name || ''} onChange={e => setC('customer_name', e.target.value)} /></div>
+            <div><label className="label">Father / Husband</label><input className="input" placeholder="e.g. Abdul Rehman" value={form.father_husband_name || ''} onChange={e => setC('father_husband_name', e.target.value)} /></div>
+            <div><label className="label">CNIC</label><input className="input" placeholder="e.g. 35201-1234567-1" value={form.cnic || ''} onChange={e => setC('cnic', e.target.value)} /></div>
             <div><label className="label">Gender</label>
               <select className="input" value={form.gender || ''} onChange={e => setC('gender', e.target.value)}>
                 <option value="">-</option><option value="M">Male</option><option value="F">Female</option>
               </select>
             </div>
-            <div><label className="label">Phone 1 *</label><input required className="input" value={form.phone_1 || ''} onChange={e => setC('phone_1', e.target.value)} /></div>
-            <div><label className="label">Phone 2</label><input className="input" value={form.phone_2 || ''} onChange={e => setC('phone_2', e.target.value)} /></div>
-            <div><label className="label">Occupation</label><input className="input" value={form.occupation || ''} onChange={e => setC('occupation', e.target.value)} /></div>
-            <div><label className="label">Monthly Income</label><input type="number" className="input" value={form.monthly_income || ''} onChange={e => setC('monthly_income', e.target.value)} /></div>
+            <div><label className="label">Phone 1 *</label><input required className="input" placeholder="e.g. 0300-1234567" value={form.phone_1 || ''} onChange={e => setC('phone_1', e.target.value)} /></div>
+            <div><label className="label">Phone 2</label><input className="input" placeholder="e.g. 0321-7654321" value={form.phone_2 || ''} onChange={e => setC('phone_2', e.target.value)} /></div>
+            <div><label className="label">Occupation</label><input className="input" placeholder="e.g. Shopkeeper" value={form.occupation || ''} onChange={e => setC('occupation', e.target.value)} /></div>
+            <div><label className="label">Monthly Income</label><input type="number" className="input" placeholder="e.g. 60000" value={form.monthly_income || ''} onChange={e => setC('monthly_income', e.target.value)} /></div>
             {isAdmin && (
               <div><label className="label">Branch *</label>
                 <select required className="input" value={form.branch_id || ''} onChange={e => setC('branch_id', e.target.value)}>
@@ -189,9 +189,9 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
                 </select>
               </div>
             )}
-            <div className="sm:col-span-3"><label className="label">Home Address</label><AutoTextarea value={form.home_address || ''} onChange={e => setC('home_address', e.target.value)} /></div>
-            <div className="sm:col-span-3"><label className="label">Official Address</label><AutoTextarea value={form.official_address || ''} onChange={e => setC('official_address', e.target.value)} /></div>
-            <div className="sm:col-span-3"><label className="label">CRC Remarks</label><textarea className="input" value={form.crc_remarks || ''} onChange={e => setC('crc_remarks', e.target.value)} /></div>
+            <div className="sm:col-span-3"><label className="label">Home Address</label><AutoTextarea placeholder="e.g. House 12, Street 5, Model Town, Sialkot" value={form.home_address || ''} onChange={e => setC('home_address', e.target.value)} /></div>
+            <div className="sm:col-span-3"><label className="label">Official Address</label><AutoTextarea placeholder="e.g. Shop 3, Main Bazaar, Sialkot" value={form.official_address || ''} onChange={e => setC('official_address', e.target.value)} /></div>
+            <div className="sm:col-span-3"><label className="label">CRC Remarks</label><textarea className="input" placeholder="e.g. Verified, good payment history" value={form.crc_remarks || ''} onChange={e => setC('crc_remarks', e.target.value)} /></div>
 
             {!isEdit && (
               <div className="sm:col-span-3 border-t pt-3 mt-1">
@@ -201,8 +201,8 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
                 </div>
                 {form.create_login && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div><label className="label">Email</label><input type="email" className="input" value={form.email || ''} onChange={e => setC('email', e.target.value)} /></div>
-                    <div><label className="label">Password</label><input type="text" className="input font-mono" value={form.password || ''} onChange={e => setC('password', e.target.value)} /></div>
+                    <div><label className="label">Email</label><input type="email" className="input" placeholder="e.g. imran@example.com" value={form.email || ''} onChange={e => setC('email', e.target.value)} /></div>
+                    <div><label className="label">Password</label><input type="text" className="input font-mono" placeholder="e.g. Set a strong password" value={form.password || ''} onChange={e => setC('password', e.target.value)} /></div>
                   </div>
                 )}
               </div>
@@ -253,15 +253,15 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
                   Guarantor #{idx + 1} <span className="text-xs font-normal text-slate-400">{idx === 2 ? '(optional)' : '(recommended — leave blank to skip)'}</span>
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div><label className="label">Name</label><input className="input" value={form.guarantors[idx]?.name || ''} onChange={e => updateGuarantor(idx, 'name', e.target.value)} /></div>
-                  <div><label className="label">Father Name</label><input className="input" value={form.guarantors[idx]?.father_name || ''} onChange={e => updateGuarantor(idx, 'father_name', e.target.value)} /></div>
-                  <div><label className="label">CNIC</label><input className="input" value={form.guarantors[idx]?.cnic || ''} onChange={e => updateGuarantor(idx, 'cnic', e.target.value)} /></div>
-                  <div><label className="label">Phone 1</label><input className="input" value={form.guarantors[idx]?.phone_1 || ''} onChange={e => updateGuarantor(idx, 'phone_1', e.target.value)} /></div>
-                  <div><label className="label">Phone 2</label><input className="input" value={form.guarantors[idx]?.phone_2 || ''} onChange={e => updateGuarantor(idx, 'phone_2', e.target.value)} /></div>
-                  <div><label className="label">Relation</label><input className="input" value={form.guarantors[idx]?.relation || ''} onChange={e => updateGuarantor(idx, 'relation', e.target.value)} /></div>
-                  <div><label className="label">Occupation</label><input className="input" value={form.guarantors[idx]?.occupation || ''} onChange={e => updateGuarantor(idx, 'occupation', e.target.value)} /></div>
-                  <div className="sm:col-span-3"><label className="label">Home Address</label><AutoTextarea value={form.guarantors[idx]?.home_address || ''} onChange={e => updateGuarantor(idx, 'home_address', e.target.value)} /></div>
-                  <div className="sm:col-span-3"><label className="label">Official Address</label><AutoTextarea value={form.guarantors[idx]?.official_address || ''} onChange={e => updateGuarantor(idx, 'official_address', e.target.value)} /></div>
+                  <div><label className="label">Name</label><input className="input" placeholder="e.g. Bilal Ahmed" value={form.guarantors[idx]?.name || ''} onChange={e => updateGuarantor(idx, 'name', e.target.value)} /></div>
+                  <div><label className="label">Father Name</label><input className="input" placeholder="e.g. Khalid Mehmood" value={form.guarantors[idx]?.father_name || ''} onChange={e => updateGuarantor(idx, 'father_name', e.target.value)} /></div>
+                  <div><label className="label">CNIC</label><input className="input" placeholder="e.g. 35201-7654321-9" value={form.guarantors[idx]?.cnic || ''} onChange={e => updateGuarantor(idx, 'cnic', e.target.value)} /></div>
+                  <div><label className="label">Phone 1</label><input className="input" placeholder="e.g. 0301-2223344" value={form.guarantors[idx]?.phone_1 || ''} onChange={e => updateGuarantor(idx, 'phone_1', e.target.value)} /></div>
+                  <div><label className="label">Phone 2</label><input className="input" placeholder="e.g. 0345-9988776" value={form.guarantors[idx]?.phone_2 || ''} onChange={e => updateGuarantor(idx, 'phone_2', e.target.value)} /></div>
+                  <div><label className="label">Relation</label><input className="input" placeholder="e.g. Brother" value={form.guarantors[idx]?.relation || ''} onChange={e => updateGuarantor(idx, 'relation', e.target.value)} /></div>
+                  <div><label className="label">Occupation</label><input className="input" placeholder="e.g. Govt employee" value={form.guarantors[idx]?.occupation || ''} onChange={e => updateGuarantor(idx, 'occupation', e.target.value)} /></div>
+                  <div className="sm:col-span-3"><label className="label">Home Address</label><AutoTextarea placeholder="e.g. House 7, Street 2, Cantt, Sialkot" value={form.guarantors[idx]?.home_address || ''} onChange={e => updateGuarantor(idx, 'home_address', e.target.value)} /></div>
+                  <div className="sm:col-span-3"><label className="label">Official Address</label><AutoTextarea placeholder="e.g. District Office, Sialkot" value={form.guarantors[idx]?.official_address || ''} onChange={e => updateGuarantor(idx, 'official_address', e.target.value)} /></div>
                 </div>
               </section>
             ))}
