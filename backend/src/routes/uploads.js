@@ -18,7 +18,7 @@ const upload = multer({
 
 const ALLOWED_BUCKETS = ['customer-pictures', 'product-images'];
 
-router.post('/:bucket', requireRole('admin', 'operator'), upload.single('file'), async (req, res) => {
+router.post('/:bucket', requireRole('super_admin', 'admin', 'operator'), upload.single('file'), async (req, res) => {
   const { bucket } = req.params;
   if (!ALLOWED_BUCKETS.includes(bucket)) {
     return res.status(400).json({ error: 'invalid bucket' });
@@ -33,7 +33,10 @@ router.post('/:bucket', requireRole('admin', 'operator'), upload.single('file'),
 
   const ext = (path.extname(req.file.originalname) || '').toLowerCase() || '.jpg';
   const safeName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
-  const objectPath = req.user.role === 'admin' ? `admin/${safeName}` : `${req.user.branch_id}/${safeName}`;
+  // admin/super_admin have no branch — store under admin/. Operators store under
+  // their branch folder.
+  const isManager = req.user.role === 'admin' || req.user.role === 'super_admin';
+  const objectPath = isManager ? `admin/${safeName}` : `${req.user.branch_id}/${safeName}`;
 
   const { error: upErr } = await supabaseAdmin.storage
     .from(bucket)
