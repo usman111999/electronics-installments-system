@@ -63,17 +63,18 @@ export default function CustomerPrintForm({ customer }) {
           <tbody>
             <tr><td colSpan={7} className="sec-title">Customer Account Information</td></tr>
             <tr>
-              <td className="lbl" style={{ width: '14%' }}>Account No.</td>
-              <td style={{ width: '17%' }}>{blank(customer.account_no)}</td>
-              <td className="lbl" style={{ width: '14%' }}>Date</td>
-              <td style={{ width: '17%' }}>{firstOrder ? dayjs(firstOrder.order_date).format('DD-MMM-YYYY') : '-'}</td>
-              <td className="lbl" style={{ width: '14%' }}>FOMS AccNo</td>
-              <td style={{ width: '14%' }}>0</td>
-              <td rowSpan={7} style={{ width: '16%', padding: '4px', textAlign: 'center', verticalAlign: 'middle' }}>
+              <td className="lbl" style={{ width: '13%' }}>Account No.</td>
+              <td style={{ width: '14%' }}>{blank(customer.account_no)}</td>
+              <td className="lbl" style={{ width: '13%' }}>Date</td>
+              <td style={{ width: '14%' }}>{firstOrder ? dayjs(firstOrder.order_date).format('DD-MMM-YYYY') : '-'}</td>
+              <td className="lbl" style={{ width: '13%' }}>FOMS AccNo</td>
+              <td style={{ width: '13%' }}>0</td>
+              <td rowSpan={7} style={{ width: '20%', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
                 {customer.picture_url
-                  ? <img src={customer.picture_url} alt="Customer" style={{ width: '78px', height: '96px', objectFit: 'cover', border: '1px solid #b6c0cf', borderRadius: '2px' }} />
-                  : <div style={{ width: '78px', height: '96px', margin: '0 auto', border: '1px dashed #b6c0cf', borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="muted">Photo</div>
+                  ? <img src={customer.picture_url} alt="Customer" style={{ width: '105px', height: '130px', objectFit: 'cover', border: '1px solid #b6c0cf', borderRadius: '3px', display: 'block', margin: '0 auto' }} />
+                  : <div style={{ width: '105px', height: '130px', margin: '0 auto', border: '1px dashed #b6c0cf', borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="muted">Photo</div>
                 }
+                <div className="muted" style={{ fontSize: '8.5px', marginTop: '4px', letterSpacing: '0.3px' }}>CUSTOMER PHOTO</div>
               </td>
             </tr>
             <tr>
