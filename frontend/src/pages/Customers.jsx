@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import CustomerWizard from '../components/CustomerWizard';
 import ConfirmDialog from '../components/ConfirmDialog';
+import Avatar from '../components/Avatar';
 import { useAuth } from '../context/AuthContext';
 
 export default function Customers() {
@@ -67,7 +68,12 @@ export default function Customers() {
             {list.map(c => (
               <tr key={c.id}>
                 <td className="font-medium">{c.account_no}</td>
-                <td>{c.customer_name}</td>
+                <td>
+                  <div className="flex items-center gap-2.5">
+                    <Avatar src={c.picture_url} name={c.customer_name} size={32} />
+                    <span>{c.customer_name}</span>
+                  </div>
+                </td>
                 <td>{c.father_husband_name || '-'}</td>
                 <td>{c.phone_1}</td>
                 <td>{c.branches?.name || '-'}</td>
