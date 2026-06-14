@@ -31,14 +31,6 @@ export default function CustomerPrintForm({ customer }) {
     0,
   );
 
-  // Schedule totals
-  const tot = installments.reduce((a, i) => ({
-    due: a.due + Number(i.amount_due || 0),
-    disc: a.disc + Number(i.discount || 0),
-    fine: a.fine + Number(i.fine || 0),
-    paid: a.paid + Number(i.amount_paid || 0),
-  }), { due: 0, disc: 0, fine: 0, paid: 0 });
-
   const guarantorRows = [
     ['Name', g => g?.name],
     ['F / H Name', g => g?.father_name],
@@ -52,30 +44,26 @@ export default function CustomerPrintForm({ customer }) {
   ];
 
   return (
-    <div className="print-form bg-white mx-auto" style={{ maxWidth: '210mm', padding: '10mm', fontSize: '10px', fontFamily: 'Arial, Helvetica, sans-serif', color: '#1f2937' }}>
+    <div className="print-form bg-white mx-auto" style={{ maxWidth: '210mm', padding: '8mm', fontSize: '8.7px', fontFamily: 'Arial, Helvetica, sans-serif', color: '#1f2937' }}>
       <style>{`
-        @media print { @page { size: A4; margin: 10mm; } }
+        @media print { @page { size: A4; margin: 8mm; } }
         .pf table { border-collapse: collapse; width: 100%; }
-        .pf td, .pf th { border: 1px solid #cbd5e1; padding: 6px 8px; vertical-align: top; line-height: 1.45; }
+        .pf td, .pf th { border: 1px solid #cbd5e1; padding: 2.5px 5px; vertical-align: top; line-height: 1.35; }
         .pf thead { display: table-header-group; }
         .pf tr { page-break-inside: avoid; }
         .pf .sec {
-          background: #1e3a5f; color: #fff; font-weight: 700; font-size: 10.5px;
-          letter-spacing: 0.8px; text-transform: uppercase; padding: 6px 10px; border: 1px solid #1e3a5f;
+          background: #1e3a5f; color: #fff; font-weight: 700; font-size: 9px;
+          letter-spacing: 0.6px; text-transform: uppercase; padding: 3.5px 8px; border: 1px solid #1e3a5f;
         }
         .pf .lbl { background: #eef2f7; font-weight: 700; color: #334155; white-space: nowrap; width: 1%; }
         .pf .val { color: #111827; }
         .pf .chead th {
-          background: #e2e8f0; font-weight: 700; color: #1e3a5f; font-size: 9px;
-          text-transform: uppercase; letter-spacing: 0.3px; text-align: left; white-space: nowrap;
+          background: #e2e8f0; font-weight: 700; color: #1e3a5f; font-size: 8px;
+          text-transform: uppercase; letter-spacing: 0.2px; text-align: left; white-space: nowrap;
         }
         .pf .zebra:nth-child(even) td { background: #f8fafc; }
         .pf .muted { color: #94a3b8; }
         .pf .num { text-align: right; font-variant-numeric: tabular-nums; }
-        .pf .totals td { background: #eef2f7; font-weight: 700; }
-        .pf .pill { display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: 8.5px; font-weight: 700; text-transform: uppercase; }
-        .pf .pill-paid { background: #dcfce7; color: #166534; }
-        .pf .pill-due  { background: #fef9c3; color: #854d0e; }
       `}</style>
 
       <div className="pf">
@@ -97,7 +85,7 @@ export default function CustomerPrintForm({ customer }) {
 
         {/* ---- Customer Information ---- */}
         <div className="sec mb-0">Customer Information</div>
-        <table className="mb-3">
+        <table className="mb-2">
           <tbody>
             <tr>
               <td className="lbl">Customer Name</td>
@@ -106,9 +94,8 @@ export default function CustomerPrintForm({ customer }) {
               <td className="val" style={{ width: '23%' }}>{blank(customer.father_husband_name)}</td>
               <td rowSpan={6} style={{ width: '22%', textAlign: 'center', verticalAlign: 'middle', padding: '8px' }}>
                 {customer.picture_url
-                  ? <img src={customer.picture_url} alt="Customer" style={{ width: '108px', height: '132px', objectFit: 'cover', border: '1px solid #94a3b8', borderRadius: '4px', display: 'block', margin: '0 auto' }} />
-                  : <div style={{ width: '108px', height: '132px', margin: '0 auto', border: '1px dashed #94a3b8', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="muted">Photo</div>}
-                <div className="muted" style={{ fontSize: '8px', marginTop: '4px', letterSpacing: '0.4px' }}>CUSTOMER PHOTO</div>
+                  ? <img src={customer.picture_url} alt="Customer" style={{ width: '84px', height: '104px', objectFit: 'cover', border: '1px solid #94a3b8', borderRadius: '3px', display: 'block', margin: '0 auto' }} />
+                  : <div style={{ width: '84px', height: '104px', margin: '0 auto', border: '1px dashed #94a3b8', borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="muted">Photo</div>}
               </td>
             </tr>
             <tr>
@@ -167,7 +154,7 @@ export default function CustomerPrintForm({ customer }) {
         </table>
 
         {/* finance figure strip */}
-        <table className="mb-3">
+        <table className="mb-2">
           <tbody>
             <tr>
               <td className="lbl">Total Price</td><td className="val num">{money(total)}</td>
@@ -189,7 +176,7 @@ export default function CustomerPrintForm({ customer }) {
 
         {/* ---- Guarantor Details (criteria × guarantor) ---- */}
         <div className="sec mb-0">Guarantor Details</div>
-        <table className="mb-3">
+        <table className="mb-2">
           <thead>
             <tr className="chead">
               <th style={{ width: '14%' }}>Criteria</th>
@@ -212,7 +199,7 @@ export default function CustomerPrintForm({ customer }) {
 
         {/* ---- Payment Schedule ---- */}
         <div className="sec mb-0">Payment Schedule</div>
-        <table className="mb-3">
+        <table className="mb-2">
           <thead>
             <tr className="chead">
               <th style={{ width: '4%' }}>#</th>
@@ -223,7 +210,6 @@ export default function CustomerPrintForm({ customer }) {
               <th className="num">Installment</th>
               <th className="num">Disc</th>
               <th className="num">Fine</th>
-              <th className="num">Paid</th>
               <th className="num">Balance</th>
               <th>Status</th>
               <th>Recovery Officer</th>
@@ -241,45 +227,17 @@ export default function CustomerPrintForm({ customer }) {
                 <td className="num">{fmt(i.amount_due)}</td>
                 <td className="num">{fmt(i.discount)}</td>
                 <td className="num">{fmt(i.fine)}</td>
-                <td className="num">{fmt(i.amount_paid)}</td>
                 <td className="num">{fmt(i.balance)}</td>
-                <td><span className={`pill ${i.status === 'paid' ? 'pill-paid' : 'pill-due'}`}>{i.status === 'paid' ? 'Paid' : 'Pending'}</span></td>
+                <td style={{ color: i.status === 'paid' ? '#166534' : '#854d0e', fontWeight: 700 }}>{i.status === 'paid' ? 'Paid' : 'Pending'}</td>
                 <td>{blank(i.recovery_officer)}</td>
                 <td>{blank(i.remarks)}</td>
               </tr>
             ))}
             {installments.length === 0 && (
-              <tr><td colSpan={multiOrder ? 13 : 12} className="muted" style={{ textAlign: 'center', padding: '14px' }}>No installments generated yet</td></tr>
-            )}
-            {installments.length > 0 && (
-              <tr className="totals">
-                <td colSpan={multiOrder ? 5 : 4} style={{ textAlign: 'right' }}>Totals</td>
-                <td className="num">{fmt(tot.due)}</td>
-                <td className="num">{fmt(tot.disc)}</td>
-                <td className="num">{fmt(tot.fine)}</td>
-                <td className="num">{fmt(tot.paid)}</td>
-                <td colSpan={4}></td>
-              </tr>
+              <tr><td colSpan={multiOrder ? 12 : 11} className="muted" style={{ textAlign: 'center', padding: '14px' }}>No installments generated yet</td></tr>
             )}
           </tbody>
         </table>
-
-        {/* ---- Signatures ---- */}
-        <table style={{ marginTop: '14px' }}>
-          <tbody>
-            <tr>
-              {['Customer Signature', 'Guarantor Signature', `For ${COMPANY_NAME}`].map(s => (
-                <td key={s} style={{ height: '46px', verticalAlign: 'bottom', textAlign: 'center', width: '33.3%' }}>
-                  <div style={{ borderTop: '1px solid #475569', paddingTop: '3px', fontSize: '9px', color: '#475569' }}>{s}</div>
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-
-        <div className="muted" style={{ textAlign: 'center', marginTop: '8px', fontSize: '8px' }}>
-          This is a system-generated account statement from {COMPANY_NAME}. Figures are accurate as of {dayjs().format('DD-MMM-YYYY hh:mm A')}.
-        </div>
       </div>
     </div>
   );
