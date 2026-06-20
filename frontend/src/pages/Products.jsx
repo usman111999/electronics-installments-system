@@ -26,18 +26,24 @@ export default function Products() {
   const [sform, setSform] = useState({ quantity: 1, status: 'in_stock' });
   const [serr, setSerr] = useState('');
 
+  const [loadErr, setLoadErr] = useState('');
   const load = async () => {
     const params = search ? { search } : {};
-    const [p, inv, b] = await Promise.all([
-      api.get('/products', { params }),
-      api.get('/inventory', { params: { status: 'in_stock' } }),
-      api.get('/branches'),
-    ]);
-    setList(p.data);
-    const counts = {};
-    for (const i of inv.data) counts[i.product_id] = (counts[i.product_id] || 0) + 1;
-    setStock(counts);
-    setBranches(b.data);
+    try {
+      setLoadErr('');
+      const [p, inv, b] = await Promise.all([
+        api.get('/products', { params }),
+        api.get('/inventory', { params: { status: 'in_stock' } }),
+        api.get('/branches'),
+      ]);
+      setList(p.data);
+      const counts = {};
+      for (const i of inv.data) counts[i.product_id] = (counts[i.product_id] || 0) + 1;
+      setStock(counts);
+      setBranches(b.data);
+    } catch (e) {
+      setLoadErr(e?.response?.data?.error || 'Could not load products. Please try again.');
+    }
   };
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [search]);
 
@@ -83,6 +89,8 @@ export default function Products() {
             <button className="btn-primary" onClick={() => { setEdit(null); setForm({}); setOpen(true); setErr(''); }}>+ Add Product</button>
           </>
         } />
+
+      {loadErr && <div className="text-sm text-red-700 bg-red-50 border border-red-100 px-4 py-3 rounded mb-3">{loadErr}</div>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {list.map(p => {

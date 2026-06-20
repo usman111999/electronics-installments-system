@@ -25,6 +25,7 @@ export default function OrderDetail() {
   const [instFilter, setInstFilter] = useState('all');
   const [genErr, setGenErr] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [loadErr, setLoadErr] = useState('');
 
   const generateNext = async () => {
     setGenerating(true); setGenErr('');
@@ -36,8 +37,15 @@ export default function OrderDetail() {
   };
 
   const load = async () => {
-    const { data } = await api.get(`/orders/${id}`);
-    setOrder(data);
+    try {
+      setLoadErr('');
+      const { data } = await api.get(`/orders/${id}`);
+      setOrder(data);
+    } catch (e) {
+      setLoadErr(e?.response?.status === 403
+        ? 'You don’t have access to this order — it belongs to another branch.'
+        : (e?.response?.data?.error || 'Could not load this order. Please try again.'));
+    }
   };
   useEffect(() => { load(); }, [id]);
 
@@ -62,6 +70,12 @@ export default function OrderDetail() {
     } catch (e) { setErr(e?.response?.data?.error || 'Payment failed'); }
   };
 
+  if (loadErr) return (
+    <div className="p-6">
+      <div className="text-sm text-red-700 bg-red-50 border border-red-100 px-4 py-3 rounded mb-3">{loadErr}</div>
+      <Link to="/orders" className="btn-secondary">← Back to orders</Link>
+    </div>
+  );
   if (!order) return <div className="p-8 text-slate-500">Loading…</div>;
 
   const allInstallments = order.installments || [];

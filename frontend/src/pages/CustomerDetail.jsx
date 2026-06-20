@@ -33,10 +33,18 @@ export default function CustomerDetail() {
   const [showPrint, setShowPrint] = useState(false);
   const [orderOpen, setOrderOpen] = useState(false);
   const [instFilter, setInstFilter] = useState('all');
+  const [err, setErr] = useState('');
 
   const load = async () => {
-    const { data } = await api.get(`/customers/${id}`);
-    setCustomer(data);
+    try {
+      setErr('');
+      const { data } = await api.get(`/customers/${id}`);
+      setCustomer(data);
+    } catch (e) {
+      setErr(e?.response?.status === 403
+        ? 'You don’t have access to this customer — it belongs to another branch.'
+        : (e?.response?.data?.error || 'Could not load this customer. Please try again.'));
+    }
   };
   useEffect(() => { load(); }, [id]);
 
@@ -65,6 +73,12 @@ export default function CustomerDetail() {
     ? allInstallments
     : allInstallments.filter(i => i.status === instFilter);
 
+  if (err) return (
+    <div className="p-6">
+      <div className="text-sm text-red-700 bg-red-50 border border-red-100 px-4 py-3 rounded mb-3">{err}</div>
+      <Link to="/customers" className="btn-secondary">← Back to customers</Link>
+    </div>
+  );
   if (!customer) return <div className="p-8 text-slate-500">Loading…</div>;
 
   if (showPrint) return (

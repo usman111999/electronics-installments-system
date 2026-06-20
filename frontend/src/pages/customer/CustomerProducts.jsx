@@ -5,10 +5,16 @@ import PageHeader from '../../components/PageHeader';
 export default function CustomerProducts() {
   const [list, setList] = useState([]);
   const [search, setSearch] = useState('');
+  const [loadErr, setLoadErr] = useState('');
 
   const load = async () => {
-    const { data } = await api.get('/products', { params: { active: 'true', ...(search ? { search } : {}) } });
-    setList(data);
+    try {
+      setLoadErr('');
+      const { data } = await api.get('/products', { params: { active: 'true', ...(search ? { search } : {}) } });
+      setList(data);
+    } catch (e) {
+      setLoadErr(e?.response?.data?.error || 'Could not load products. Please try again.');
+    }
   };
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [search]);
 
@@ -22,6 +28,8 @@ export default function CustomerProducts() {
     <div className="p-6">
       <PageHeader title="Browse Products" subtitle="Available electronics with installment options"
         actions={<input className="input !w-64" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} />} />
+
+      {loadErr && <div className="text-sm text-red-700 bg-red-50 border border-red-100 px-4 py-3 rounded mb-3">{loadErr}</div>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {list.map(p => {

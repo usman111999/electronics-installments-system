@@ -56,7 +56,8 @@ router.post('/:id/pay', requirePermission('installments.record_payment'), async 
     .from('installments').select('*, orders(*)').eq('id', id).single();
   if (instErr || !inst) return res.status(404).json({ error: 'Installment not found' });
   const order = inst.orders;
-  if (req.user.role === 'operator' && order.branch_id !== req.user.branch_id) {
+  const payScope = scopeBranch(req);
+  if (payScope && order.branch_id !== payScope) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   if (inst.status === 'paid') {
@@ -151,7 +152,8 @@ router.post('/next', requirePermission('installments.record_payment'), async (re
 
   const { data: order } = await supabaseAdmin.from('orders').select('*').eq('id', orderId).single();
   if (!order) return res.status(404).json({ error: 'Order not found' });
-  if (req.user.role === 'operator' && order.branch_id !== req.user.branch_id) {
+  const nextScope = scopeBranch(req);
+  if (nextScope && order.branch_id !== nextScope) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
@@ -197,14 +199,25 @@ router.post('/next', requirePermission('installments.record_payment'), async (re
   res.status(201).json(created);
 });
 
-router.post('/mark-overdue', requirePermission('installments.record_payment'), async (_req, res) => {
+router.post('/mark-overdue', requirePermission('installments.record_payment'), async (req, res) => {
   const today = dayjs().format('YYYY-MM-DD');
-  const { data, error } = await supabaseAdmin
+  let q = supabaseAdmin
     .from('installments')
     .update({ status: 'overdue' })
     .lt('due_date', today)
-    .in('status', ['pending', 'partial'])
-    .select();
+    .in('status', ['pending', 'partial']);
+
+  // Branch-scoped users only flip overdue status within their own branch.
+  const scope = scopeBranch(req);
+  if (scope) {
+    const { data: ordersInBranch } = await supabaseAdmin
+      .from('orders').select('id').eq('branch_id', scope);
+    const ids = (ordersInBranch || []).map(o => o.id);
+    if (!ids.length) return res.json({ updated: 0 });
+    q = q.in('order_id', ids);
+  }
+
+  const { data, error } = await q.select();
   if (error) return res.status(500).json({ error: error.message });
   res.json({ updated: data?.length || 0 });
 });

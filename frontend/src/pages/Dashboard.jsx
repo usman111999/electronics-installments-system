@@ -15,26 +15,35 @@ export default function Dashboard() {
   const [monthly, setMonthly] = useState([]);
   const [byBranch, setByBranch] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
+  const [err, setErr] = useState('');
 
   useEffect(() => {
     (async () => {
-      const [a, b, d] = await Promise.all([
-        api.get('/stats/overview'),
-        api.get('/stats/monthly-collections'),
-        api.get('/stats/top-products'),
-      ]);
-      setOverview(a.data);
-      setMonthly(b.data);
-      setTopProducts(d.data);
-      if (user?.role === 'admin') {
-        try {
-          const c = await api.get('/stats/orders-by-branch');
-          setByBranch(c.data);
-        } catch {}
+      try {
+        setErr('');
+        const [a, b, d] = await Promise.all([
+          api.get('/stats/overview'),
+          api.get('/stats/monthly-collections'),
+          api.get('/stats/top-products'),
+        ]);
+        setOverview(a.data);
+        setMonthly(b.data);
+        setTopProducts(d.data);
+        if (user?.role === 'admin') {
+          try {
+            const c = await api.get('/stats/orders-by-branch');
+            setByBranch(c.data);
+          } catch {}
+        }
+      } catch (e) {
+        setErr(e?.response?.status === 403
+          ? 'You don’t have access to this (different branch).'
+          : (e?.response?.data?.error || 'Could not load. Please try again.'));
       }
     })();
   }, [user]);
 
+  if (err) return <div className="p-6"><div className="text-sm text-red-700 bg-red-50 border border-red-100 px-4 py-3 rounded">{err}</div></div>;
   if (!overview) return <div className="p-8 text-slate-500">Loading dashboard…</div>;
 
   return (

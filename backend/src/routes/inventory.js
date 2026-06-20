@@ -53,11 +53,12 @@ router.patch('/:id', requirePermission('inventory.manage'), async (req, res) => 
   const updates = req.body || {};
   delete updates.id;
 
-  // operator can only update inventory in their branch
-  if (req.user.role === 'operator') {
+  // branch-scoped users can only update inventory in their own branch
+  const scope = scopeBranch(req);
+  if (scope) {
     const { data: existing } = await supabaseAdmin
       .from('inventory').select('branch_id').eq('id', req.params.id).single();
-    if (!existing || existing.branch_id !== req.user.branch_id) {
+    if (!existing || existing.branch_id !== scope) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     delete updates.branch_id;
@@ -76,10 +77,11 @@ router.patch('/:id', requirePermission('inventory.manage'), async (req, res) => 
 
 router.delete('/:id', requirePermission('inventory.manage'), async (req, res) => {
   const { id } = req.params;
-  if (req.user.role === 'operator') {
+  const scope = scopeBranch(req);
+  if (scope) {
     const { data: existing } = await supabaseAdmin
       .from('inventory').select('branch_id').eq('id', id).single();
-    if (!existing || existing.branch_id !== req.user.branch_id) {
+    if (!existing || existing.branch_id !== scope) {
       return res.status(403).json({ error: 'Forbidden' });
     }
   }

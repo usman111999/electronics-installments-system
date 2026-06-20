@@ -11,18 +11,27 @@ export default function CustomerHome() {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [err, setErr] = useState('');
 
   useEffect(() => {
     (async () => {
-      const [s, c] = await Promise.all([
-        api.get('/stats/customer'),
-        api.get('/customers'), // backend returns just the customer's own row for role=customer
-      ]);
-      setStats(s.data);
-      setProfile(Array.isArray(c.data) ? (c.data[0] || null) : c.data);
+      try {
+        setErr('');
+        const [s, c] = await Promise.all([
+          api.get('/stats/customer'),
+          api.get('/customers'), // backend returns just the customer's own row for role=customer
+        ]);
+        setStats(s.data);
+        setProfile(Array.isArray(c.data) ? (c.data[0] || null) : c.data);
+      } catch (e) {
+        setErr(e?.response?.status === 403
+          ? 'You don’t have access to this (different branch).'
+          : (e?.response?.data?.error || 'Could not load. Please try again.'));
+      }
     })();
   }, []);
 
+  if (err) return <div className="p-6"><div className="text-sm text-red-700 bg-red-50 border border-red-100 px-4 py-3 rounded">{err}</div></div>;
   if (!stats) return <div className="p-8 text-slate-500">Loading…</div>;
 
   return (

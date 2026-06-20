@@ -9,10 +9,21 @@ const statusClass = { paid: 'badge-green', pending: 'badge-yellow', overdue: 'ba
 export default function CustomerInstallments() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
 
   useEffect(() => {
-    api.get('/installments').then(r => { setList(r.data); setLoading(false); });
+    setErr('');
+    api.get('/installments')
+      .then(r => { setList(r.data); })
+      .catch(e => {
+        setErr(e?.response?.status === 403
+          ? 'You don’t have access to this (different branch).'
+          : (e?.response?.data?.error || 'Could not load. Please try again.'));
+      })
+      .finally(() => setLoading(false));
   }, []);
+
+  if (err) return <div className="p-6"><div className="text-sm text-red-700 bg-red-50 border border-red-100 px-4 py-3 rounded">{err}</div></div>;
 
   const totalDue = list.reduce((s, i) => s + Math.max(0, Number(i.amount_due) - Number(i.amount_paid || 0)), 0);
   const totalPaid = list.reduce((s, i) => s + Number(i.amount_paid || 0), 0);

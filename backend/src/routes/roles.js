@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, invalidateAll } = require('../middleware/auth');
+const { authenticate, requirePermission, invalidateAll, scopeBranch } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
@@ -61,6 +61,11 @@ router.get('/:id', requirePermission('roles.view'), async (req, res) => {
   const { data: role, error } = await supabaseAdmin
     .from('roles').select('*, branches(id, name)').eq('id', req.params.id).single();
   if (error) return res.status(404).json({ error: error.message });
+  // Branch-scoped users may only view global roles or roles in their own branch.
+  const scope = scopeBranch(req);
+  if (scope && role.branch_id && role.branch_id !== scope) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { data: rps } = await supabaseAdmin
     .from('role_permissions').select('permission_id').eq('role_id', role.id);
   res.json({ ...role, permissions: (rps || []).map(p => p.permission_id) });

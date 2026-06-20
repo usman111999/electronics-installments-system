@@ -41,7 +41,7 @@ router.post('/enrollment-tokens', authenticate, requirePermission('devices.enrol
     .from('orders').select('id, branch_id, customer_id, order_no').eq('id', order_id).single();
   if (orderErr || !order) return res.status(404).json({ error: 'Order not found' });
 
-  if (req.user.role === 'operator' && order.branch_id !== req.user.branch_id) {
+  if (scopeBranch(req) && order.branch_id !== scopeBranch(req)) {
     return res.status(403).json({ error: 'Order is not in your branch' });
   }
 
@@ -346,7 +346,7 @@ router.get('/:imei/status', authenticate, requirePermission('devices.view'), asy
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   if (!device) return res.status(404).json({ error: 'Device not found' });
-  if (req.user.role === 'operator' && device.branch_id !== req.user.branch_id) {
+  if (scopeBranch(req) && device.branch_id !== scopeBranch(req)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
@@ -374,7 +374,7 @@ router.get('/:imei/locations', authenticate, requirePermission('devices.view'), 
     .from('devices').select('id, branch_id').eq('imei', req.params.imei).maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   if (!device) return res.status(404).json({ error: 'Device not found' });
-  if (req.user.role === 'operator' && device.branch_id !== req.user.branch_id) {
+  if (scopeBranch(req) && device.branch_id !== scopeBranch(req)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
@@ -397,7 +397,7 @@ router.get('/:imei/events', authenticate, requirePermission('devices.view'), asy
   const { data: device } = await supabaseAdmin
     .from('devices').select('id, order_id, branch_id').eq('imei', req.params.imei).maybeSingle();
   if (!device) return res.status(404).json({ error: 'Device not found' });
-  if (req.user.role === 'operator' && device.branch_id !== req.user.branch_id) {
+  if (scopeBranch(req) && device.branch_id !== scopeBranch(req)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
@@ -426,7 +426,7 @@ router.post('/:imei/locate', authenticate, requirePermission('devices.locate'), 
   const { data: device } = await supabaseAdmin
     .from('devices').select('*, orders(*)').eq('imei', req.params.imei).maybeSingle();
   if (!device) return res.status(404).json({ error: 'Device not found' });
-  if (req.user.role === 'operator' && device.branch_id !== req.user.branch_id) {
+  if (scopeBranch(req) && device.branch_id !== scopeBranch(req)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   if (!device.order_id || !device.orders) return res.status(400).json({ error: 'Device has no order' });

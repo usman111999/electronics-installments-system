@@ -106,11 +106,19 @@ function requirePermission(...perms) {
   };
 }
 
+// Nil UUID — a valid uuid that matches no real branch. Used so a branch-scoped
+// user with no branch assigned sees NOTHING rather than falling through to
+// "no filter = everything".
+const NO_BRANCH = '00000000-0000-0000-0000-000000000000';
+
 function scopeBranch(req) {
   if (!req.user) return null;
   // super_admin sees everything by default; admin still global as before.
   if (req.user.role === 'admin' || req.user.role === 'super_admin') return null;
-  return req.user.branch_id;
+  // Branch-scoped roles (operator / custom): pin to their branch. If somehow no
+  // branch is assigned, return the nil UUID so the query returns zero rows —
+  // never leak other branches' data.
+  return req.user.branch_id || NO_BRANCH;
 }
 
 module.exports = {

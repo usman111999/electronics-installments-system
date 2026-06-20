@@ -20,16 +20,22 @@ export default function Inventory() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ status: 'in_stock' });
   const [err, setErr] = useState('');
+  const [loadErr, setLoadErr] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
   const load = async () => {
     const params = statusFilter ? { status: statusFilter } : {};
-    const [a, b, c] = await Promise.all([
-      api.get('/inventory', { params }),
-      api.get('/products', { params: { active: 'true' } }),
-      api.get('/branches'),
-    ]);
-    setList(a.data); setProducts(b.data); setBranches(c.data);
+    try {
+      setLoadErr('');
+      const [a, b, c] = await Promise.all([
+        api.get('/inventory', { params }),
+        api.get('/products', { params: { active: 'true' } }),
+        api.get('/branches'),
+      ]);
+      setList(a.data); setProducts(b.data); setBranches(c.data);
+    } catch (e) {
+      setLoadErr(e?.response?.data?.error || 'Could not load inventory. Please try again.');
+    }
   };
   useEffect(() => { load(); }, [statusFilter]);
 
@@ -59,6 +65,7 @@ export default function Inventory() {
             <button className="btn-primary" onClick={() => { setOpen(true); setErr(''); }}>+ Add Stock</button>
           </>
         } />
+      {loadErr && <div className="text-sm text-red-700 bg-red-50 border border-red-100 px-4 py-3 rounded mb-3">{loadErr}</div>}
       <div className="card overflow-x-auto p-0">
         <table className="table-base">
           <thead><tr><th>Product</th><th>Model</th><th>Serial No.</th><th>Branch</th><th>Cost</th><th>Status</th><th>Received</th></tr></thead>

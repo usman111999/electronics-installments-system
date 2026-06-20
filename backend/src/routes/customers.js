@@ -60,7 +60,10 @@ router.get('/:id', async (req, res) => {
   if (req.user.role === 'customer' && data.profile_id !== req.user.id) {
     return res.status(403).json({ error: 'Forbidden' });
   }
-  if (req.user.role === 'operator' && data.branch_id !== req.user.branch_id) {
+  // Any branch-scoped role (operator or custom) may only open a customer in
+  // their own branch.
+  const scope = scopeBranch(req);
+  if (scope && data.branch_id !== scope) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   res.json(data);
@@ -173,10 +176,11 @@ router.patch('/:id', requirePermission('customers.manage'), async (req, res) => 
   delete updates.guarantors;
   delete updates.id;
 
-  if (req.user.role === 'operator') {
+  const scope = scopeBranch(req);
+  if (scope) {
     const { data: existing } = await supabaseAdmin
       .from('customers').select('branch_id').eq('id', id).single();
-    if (!existing || existing.branch_id !== req.user.branch_id) {
+    if (!existing || existing.branch_id !== scope) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     delete updates.branch_id;

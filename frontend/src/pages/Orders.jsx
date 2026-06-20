@@ -19,15 +19,21 @@ export default function Orders() {
   const [inventory, setInventory] = useState([]);
   const [branches, setBranches] = useState([]);
   const [err, setErr] = useState('');
+  const [loadErr, setLoadErr] = useState('');
 
   const load = async () => {
-    const [o, c, p, b] = await Promise.all([
-      api.get('/orders'),
-      api.get('/customers'),
-      api.get('/products', { params: { active: 'true' } }),
-      api.get('/branches'),
-    ]);
-    setList(o.data); setCustomers(c.data); setProducts(p.data); setBranches(b.data);
+    try {
+      setLoadErr('');
+      const [o, c, p, b] = await Promise.all([
+        api.get('/orders'),
+        api.get('/customers'),
+        api.get('/products', { params: { active: 'true' } }),
+        api.get('/branches'),
+      ]);
+      setList(o.data); setCustomers(c.data); setProducts(p.data); setBranches(b.data);
+    } catch (e) {
+      setLoadErr(e?.response?.data?.error || 'Could not load orders. Please try again.');
+    }
   };
   useEffect(() => { load(); }, []);
 
@@ -83,6 +89,8 @@ export default function Orders() {
     <div className="p-6">
       <PageHeader title="Orders" subtitle="Sales with installment plans"
         actions={<button className="btn-primary" onClick={() => { setOpen(true); setErr(''); }}>+ New Order</button>} />
+
+      {loadErr && <div className="text-sm text-red-700 bg-red-50 border border-red-100 px-4 py-3 rounded mb-3">{loadErr}</div>}
 
       <div className="card overflow-x-auto p-0">
         <table className="table-base">

@@ -17,6 +17,7 @@ export default function Customers() {
   const [editing, setEditing] = useState(null);
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState('');
   const [toDelete, setToDelete] = useState(null);
   const [delErr, setDelErr] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -24,12 +25,18 @@ export default function Customers() {
   const load = async () => {
     setLoading(true);
     const params = search ? { search } : {};
-    const [c, b] = await Promise.all([
-      api.get('/customers', { params }),
-      api.get('/branches'),
-    ]);
-    setList(c.data); setBranches(b.data);
-    setLoading(false);
+    try {
+      setLoadErr('');
+      const [c, b] = await Promise.all([
+        api.get('/customers', { params }),
+        api.get('/branches'),
+      ]);
+      setList(c.data); setBranches(b.data);
+    } catch (e) {
+      setLoadErr(e?.response?.data?.error || 'Could not load customers. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [search]);
 
@@ -60,6 +67,8 @@ export default function Customers() {
             <button className="btn-primary" onClick={openNew}>+ New Customer</button>
           </>
         } />
+
+      {loadErr && <div className="text-sm text-red-700 bg-red-50 border border-red-100 px-4 py-3 rounded mb-3">{loadErr}</div>}
 
       <div className="card overflow-x-auto p-0">
         <table className="table-base">

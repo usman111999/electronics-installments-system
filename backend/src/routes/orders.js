@@ -54,7 +54,8 @@ router.get('/:id', async (req, res) => {
 
   if (data?.installments) data.installments.sort((a, b) => a.installment_no - b.installment_no);
 
-  if (req.user.role === 'operator' && data.branch_id !== req.user.branch_id) {
+  const scope = scopeBranch(req);
+  if (scope && data.branch_id !== scope) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   if (req.user.role === 'customer' && data.customers?.profile_id !== req.user.id) {
@@ -191,10 +192,11 @@ router.patch('/:id', requirePermission('orders.update'), async (req, res) => {
   delete updates.branch_id;
   delete updates.customer_id;
 
-  if (req.user.role === 'operator') {
+  const scope = scopeBranch(req);
+  if (scope) {
     const { data: existing } = await supabaseAdmin
       .from('orders').select('branch_id').eq('id', req.params.id).single();
-    if (!existing || existing.branch_id !== req.user.branch_id) {
+    if (!existing || existing.branch_id !== scope) {
       return res.status(403).json({ error: 'Forbidden' });
     }
   }
@@ -215,7 +217,8 @@ async function loadOrderForLockOp(orderId, user) {
   const { data: order, error } = await supabaseAdmin
     .from('orders').select('*').eq('id', orderId).single();
   if (error || !order) return { error: { status: 404, msg: 'Order not found' } };
-  if (user.role === 'operator' && order.branch_id !== user.branch_id) {
+  const scope = scopeBranch({ user });
+  if (scope && order.branch_id !== scope) {
     return { error: { status: 403, msg: 'Forbidden' } };
   }
   return { order };
