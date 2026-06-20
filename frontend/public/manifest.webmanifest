@@ -1,0 +1,15 @@
+{
+  "name": "Ansaf Electronic",
+  "short_name": "Ansaf",
+  "description": "Electronics on easy installments",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/ansaf-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/ansaf-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/ansaf-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

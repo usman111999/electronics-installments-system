@@ -151,8 +151,6 @@ export default function OrderDetail() {
   if (!order) return <div className="p-8 text-slate-500">Loading…</div>;
 
   const allInstallments = order.installments || [];
-  // Only the most-recent invoice can be deleted (keeps the running balance sane).
-  const lastInstNo = allInstallments.reduce((m, i) => Math.max(m, i.installment_no || 0), 0);
   // True money picture, independent of how many invoices are created yet:
   const advance = Number(order.advance_payment || 0);
   const discount = Number(order.discount || 0);
@@ -256,11 +254,9 @@ export default function OrderDetail() {
                 <td className="whitespace-nowrap space-x-2">
                   {i.status !== 'paid' && <button onClick={() => openPay(i)} className="text-brand-600 text-sm">Pay</button>}
                   <button onClick={() => openEdit(i)} className="text-slate-600 text-sm hover:text-slate-900">Edit</button>
-                  {i.installment_no === lastInstNo && (
-                    <button onClick={() => doDelete(i)} disabled={deleting === i.id} className="text-red-600 text-sm hover:text-red-700 disabled:opacity-50">
-                      {deleting === i.id ? '…' : 'Delete'}
-                    </button>
-                  )}
+                  <button onClick={() => doDelete(i)} disabled={deleting === i.id} className="text-red-600 text-sm hover:text-red-700 disabled:opacity-50">
+                    {deleting === i.id ? '…' : 'Delete'}
+                  </button>
                 </td>
               </tr>
             ))}

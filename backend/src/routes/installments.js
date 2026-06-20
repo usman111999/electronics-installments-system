@@ -298,13 +298,10 @@ router.delete('/:id', requirePermission('installments.record_payment'), async (r
   const scope = scopeBranch(req);
   if (scope && order.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
 
-  const { data: maxRow } = await supabaseAdmin
-    .from('installments').select('installment_no')
-    .eq('order_id', inst.order_id).order('installment_no', { ascending: false }).limit(1).single();
-  if (maxRow && maxRow.installment_no !== inst.installment_no) {
-    return res.status(409).json({ error: 'Only the most recent installment can be deleted. Delete the later one(s) first.' });
-  }
-
+  // Any installment can be deleted. Totals are always derived from the rows that
+  // remain, so collected/remaining/paid-count stay correct. The deleted amount
+  // simply becomes un-billed again and the engine will re-bill it on a later
+  // month (or via Generate now / Advance).
   const { error: delErr } = await supabaseAdmin.from('installments').delete().eq('id', id);
   if (delErr) return res.status(400).json({ error: delErr.message });
 
