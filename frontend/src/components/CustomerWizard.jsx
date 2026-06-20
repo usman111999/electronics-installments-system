@@ -18,7 +18,11 @@ const customerToForm = (c) => {
     const idx = Math.min(Math.max((g.guarantor_number || 1) - 1, 0), 2);
     slots[idx] = { ...blankGuarantor(), ...g };
   });
-  return { ...c, guarantors: slots };
+  // Drop joined relations / server-managed fields — they are NOT columns on the
+  // customers table and would break the update ("could not find the 'branches'
+  // column"). Only real, editable columns are kept.
+  const { branches, orders, created_at, updated_at, ...cols } = c;
+  return { ...cols, guarantors: slots };
 };
 
 const fmt = (n) => `Rs. ${Number(n || 0).toLocaleString()}`;

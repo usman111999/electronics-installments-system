@@ -173,8 +173,9 @@ router.patch('/:id', requirePermission('customers.manage'), async (req, res) => 
   const { id } = req.params;
   const updates = { ...(req.body || {}) };
   const guarantors = updates.guarantors;
-  delete updates.guarantors;
-  delete updates.id;
+  // Strip joined relations / server-managed fields — these are not columns on
+  // the customers table and Postgres rejects the whole update if they're sent.
+  ['guarantors', 'orders', 'branches', 'id', 'created_at', 'updated_at'].forEach(k => delete updates[k]);
 
   const scope = scopeBranch(req);
   if (scope) {
