@@ -26,6 +26,10 @@ export default function OrderDetail() {
   const [genErr, setGenErr] = useState('');
   const [generating, setGenerating] = useState(false);
   const [loadErr, setLoadErr] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [editErr, setEditErr] = useState('');
+  const [deleting, setDeleting] = useState(null);
 
   const generateNext = async () => {
     setGenerating(true); setGenErr('');
@@ -70,6 +74,40 @@ export default function OrderDetail() {
     } catch (e) { setErr(e?.response?.data?.error || 'Payment failed'); }
   };
 
+  const openEdit = (inst) => {
+    setSelected(inst);
+    setEditForm({
+      amount_paid: inst.amount_paid ?? 0,
+      due_date: inst.due_date ? dayjs(inst.due_date).format('YYYY-MM-DD') : '',
+      payment_date: inst.payment_date ? dayjs(inst.payment_date).format('YYYY-MM-DD') : '',
+      discount: inst.discount ?? '',
+      fine: inst.fine ?? '',
+      receipt_no: inst.receipt_no ?? '',
+      remarks: inst.remarks ?? '',
+    });
+    setEditErr('');
+    setEditOpen(true);
+  };
+
+  const submitEdit = async (e) => {
+    e.preventDefault();
+    setEditErr('');
+    try {
+      await api.patch(`/installments/${selected.id}`, editForm);
+      setEditOpen(false); await load();
+    } catch (e) { setEditErr(e?.response?.data?.error || 'Could not save changes'); }
+  };
+
+  const doDelete = async (inst) => {
+    if (!window.confirm(`Delete installment #${inst.installment_no}? This removes the invoice and recalculates the plan totals. This cannot be undone.`)) return;
+    setDeleting(inst.id);
+    try {
+      await api.delete(`/installments/${inst.id}`);
+      await load();
+    } catch (e) { alert(e?.response?.data?.error || 'Could not delete this installment'); }
+    finally { setDeleting(null); }
+  };
+
   if (loadErr) return (
     <div className="p-6">
       <div className="text-sm text-red-700 bg-red-50 border border-red-100 px-4 py-3 rounded mb-3">{loadErr}</div>
@@ -79,6 +117,8 @@ export default function OrderDetail() {
   if (!order) return <div className="p-8 text-slate-500">Loading…</div>;
 
   const allInstallments = order.installments || [];
+  // Only the most-recent invoice can be deleted (keeps the running balance sane).
+  const lastInstNo = allInstallments.reduce((m, i) => Math.max(m, i.installment_no || 0), 0);
   // True money picture, independent of how many invoices are created yet:
   const advance = Number(order.advance_payment || 0);
   const discount = Number(order.discount || 0);
@@ -174,7 +214,15 @@ export default function OrderDetail() {
                 <td>{fmt(i.balance)}</td>
                 <td className="text-xs">{i.receipt_no || '-'}</td>
                 <td><span className={statusClass[i.status] || 'badge-gray'}>{i.status}</span></td>
-                <td>{i.status !== 'paid' && <button onClick={() => openPay(i)} className="text-brand-600 text-sm">Pay</button>}</td>
+                <td className="whitespace-nowrap space-x-2">
+                  {i.status !== 'paid' && <button onClick={() => openPay(i)} className="text-brand-600 text-sm">Pay</button>}
+                  <button onClick={() => openEdit(i)} className="text-slate-600 text-sm hover:text-slate-900">Edit</button>
+                  {i.installment_no === lastInstNo && (
+                    <button onClick={() => doDelete(i)} disabled={deleting === i.id} className="text-red-600 text-sm hover:text-red-700 disabled:opacity-50">
+                      {deleting === i.id ? '…' : 'Delete'}
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
             {visibleInstallments.length === 0 && (
@@ -226,6 +274,28 @@ export default function OrderDetail() {
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={() => setPayOpen(false)} className="btn-secondary">Cancel</button>
             <button className="btn-primary">Record Payment</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Edit Invoice #${selected?.installment_no}`}>
+        <form onSubmit={submitEdit} className="space-y-3">
+          {editErr && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">{editErr}</div>}
+          <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded px-3 py-2">
+            Adjust this invoice to correct a mistake. Amount due is fixed by the plan; set <b>Amount paid</b> to 0 to mark it unpaid. Totals recalculate automatically.
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Amount paid *</label><input type="number" step="0.01" required className="input" value={editForm.amount_paid ?? ''} onChange={e => setEditForm(f => ({ ...f, amount_paid: e.target.value }))}/></div>
+            <div><label className="label">Due Date</label><input type="date" className="input" value={editForm.due_date || ''} onChange={e => setEditForm(f => ({ ...f, due_date: e.target.value }))}/></div>
+            <div><label className="label">Payment Date</label><input type="date" className="input" value={editForm.payment_date || ''} onChange={e => setEditForm(f => ({ ...f, payment_date: e.target.value }))}/></div>
+            <div><label className="label">Receipt #</label><input className="input" value={editForm.receipt_no || ''} onChange={e => setEditForm(f => ({ ...f, receipt_no: e.target.value }))}/></div>
+            <div><label className="label">Discount</label><input type="number" step="0.01" className="input" value={editForm.discount ?? ''} onChange={e => setEditForm(f => ({ ...f, discount: e.target.value }))}/></div>
+            <div><label className="label">Fine</label><input type="number" step="0.01" className="input" value={editForm.fine ?? ''} onChange={e => setEditForm(f => ({ ...f, fine: e.target.value }))}/></div>
+            <div className="col-span-2"><label className="label">Remarks</label><input className="input" value={editForm.remarks || ''} onChange={e => setEditForm(f => ({ ...f, remarks: e.target.value }))}/></div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={() => setEditOpen(false)} className="btn-secondary">Cancel</button>
+            <button className="btn-primary">Save changes</button>
           </div>
         </form>
       </Modal>

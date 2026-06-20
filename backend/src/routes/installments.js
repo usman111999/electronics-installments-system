@@ -222,4 +222,103 @@ router.post('/mark-overdue', requirePermission('installments.record_payment'), a
   res.json({ updated: data?.length || 0 });
 });
 
+// Re-derive an order's status from its current installments. Only toggles
+// between 'active' and 'completed' — never touches a cancelled order.
+async function recomputeOrderStatus(orderId, order) {
+  if (order.status !== 'active' && order.status !== 'completed') return;
+  const { data: sibs } = await supabaseAdmin
+    .from('installments').select('amount_due, status').eq('order_id', orderId);
+  const list = sibs || [];
+  const allPaid = list.length > 0 && list.every(s => s.status === 'paid');
+  const sumDue = list.reduce((s, x) => s + Number(x.amount_due || 0), 0);
+  const totalToPay = Number(order.total_price) - Number(order.advance_payment || 0) - Number(order.discount || 0);
+  const nothingLeft = list.length >= Number(order.total_installments) || (totalToPay - sumDue) <= 0.009;
+  const newStatus = (allPaid && nothingLeft) ? 'completed' : 'active';
+  if (newStatus !== order.status) {
+    await supabaseAdmin.from('orders').update({ status: newStatus }).eq('id', orderId);
+  }
+}
+
+// Edit an installment / its payment. Recomputes status and the order status.
+// amount_due (the financed chain) is intentionally NOT editable here.
+router.patch('/:id', requirePermission('installments.record_payment'), async (req, res) => {
+  const { id } = req.params;
+  const body = req.body || {};
+
+  const { data: inst, error: instErr } = await supabaseAdmin
+    .from('installments').select('*, orders(*)').eq('id', id).single();
+  if (instErr || !inst) return res.status(404).json({ error: 'Installment not found' });
+  const order = inst.orders;
+  const scope = scopeBranch(req);
+  if (scope && order.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
+
+  const amountPaid = body.amount_paid != null ? Number(body.amount_paid) : Number(inst.amount_paid || 0);
+  if (!(amountPaid >= 0)) return res.status(400).json({ error: 'amount_paid must be >= 0' });
+  const fineAmt = body.fine != null ? Number(body.fine) : Number(inst.fine || 0);
+  const discAmt = body.discount != null ? Number(body.discount) : Number(inst.discount || 0);
+  const dueDate = body.due_date || inst.due_date;
+  const remarks = body.remarks !== undefined ? body.remarks : inst.remarks;
+  const reqReceipt = body.receipt_no !== undefined ? body.receipt_no : inst.receipt_no;
+  const reqPayDate = body.payment_date !== undefined ? body.payment_date : inst.payment_date;
+
+  const netDue = Math.max(0, Number(inst.amount_due) + fineAmt - discAmt);
+  let status;
+  if (amountPaid >= netDue && amountPaid > 0) status = 'paid';
+  else if (amountPaid <= 0) status = 'pending';
+  else status = 'partial';
+  if (status === 'pending' && dueDate && dayjs(dueDate).isBefore(dayjs(), 'day')) status = 'overdue';
+
+  const { data: updated, error } = await supabaseAdmin
+    .from('installments')
+    .update({
+      amount_paid: amountPaid,
+      fine: fineAmt,
+      discount: discAmt,
+      due_date: dueDate,
+      remarks,
+      status,
+      // payment fields only make sense when something is paid
+      payment_date: amountPaid > 0 ? (reqPayDate || dayjs().format('YYYY-MM-DD')) : null,
+      receipt_no: amountPaid > 0 ? (reqReceipt || inst.receipt_no || genReceiptNo()) : null,
+    })
+    .eq('id', id).select().single();
+  if (error) return res.status(400).json({ error: error.message });
+
+  await recomputeOrderStatus(inst.order_id, order);
+  await logActivity({
+    userId: req.user.id, branchId: order.branch_id, action: 'edit_installment',
+    entityType: 'installment', entityId: id, details: { amount_paid: amountPaid, status, due_date: dueDate }, req,
+  });
+  res.json(updated);
+});
+
+// Delete an installment — only the most recent one for the order, so the running
+// balance and installment numbering stay consistent.
+router.delete('/:id', requirePermission('installments.record_payment'), async (req, res) => {
+  const { id } = req.params;
+  const { data: inst, error: instErr } = await supabaseAdmin
+    .from('installments').select('*, orders(*)').eq('id', id).single();
+  if (instErr || !inst) return res.status(404).json({ error: 'Installment not found' });
+  const order = inst.orders;
+  const scope = scopeBranch(req);
+  if (scope && order.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
+
+  const { data: maxRow } = await supabaseAdmin
+    .from('installments').select('installment_no')
+    .eq('order_id', inst.order_id).order('installment_no', { ascending: false }).limit(1).single();
+  if (maxRow && maxRow.installment_no !== inst.installment_no) {
+    return res.status(409).json({ error: 'Only the most recent installment can be deleted. Delete the later one(s) first.' });
+  }
+
+  const { error: delErr } = await supabaseAdmin.from('installments').delete().eq('id', id);
+  if (delErr) return res.status(400).json({ error: delErr.message });
+
+  await recomputeOrderStatus(inst.order_id, order);
+  await logActivity({
+    userId: req.user.id, branchId: order.branch_id, action: 'delete_installment',
+    entityType: 'installment', entityId: id, details: { installment_no: inst.installment_no }, req,
+  });
+  res.json({ ok: true });
+});
+
 module.exports = router;
