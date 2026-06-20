@@ -30,6 +30,13 @@ export default function OrderDetail() {
   const [editForm, setEditForm] = useState({});
   const [editErr, setEditErr] = useState('');
   const [deleting, setDeleting] = useState(null);
+  const [advOpen, setAdvOpen] = useState(false);
+  const [advForm, setAdvForm] = useState({ months: 1, amount: '' });
+  const [advErr, setAdvErr] = useState('');
+  const [advBusy, setAdvBusy] = useState(false);
+  const [advNote, setAdvNote] = useState('');
+  const [paying, setPaying] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const generateNext = async () => {
     setGenerating(true); setGenErr('');
@@ -67,11 +74,12 @@ export default function OrderDetail() {
 
   const submitPay = async (e) => {
     e.preventDefault();
-    setErr('');
+    setErr(''); setPaying(true);
     try {
       await api.post(`/installments/${selected.id}/pay`, pay);
       setPayOpen(false); await load();
     } catch (e) { setErr(e?.response?.data?.error || 'Payment failed'); }
+    finally { setPaying(false); }
   };
 
   const openEdit = (inst) => {
@@ -91,11 +99,37 @@ export default function OrderDetail() {
 
   const submitEdit = async (e) => {
     e.preventDefault();
-    setEditErr('');
+    setEditErr(''); setSavingEdit(true);
     try {
       await api.patch(`/installments/${selected.id}`, editForm);
       setEditOpen(false); await load();
     } catch (e) { setEditErr(e?.response?.data?.error || 'Could not save changes'); }
+    finally { setSavingEdit(false); }
+  };
+
+  const openAdvance = () => { setAdvForm({ months: 1, amount: '' }); setAdvErr(''); setAdvNote(''); setAdvOpen(true); };
+  const submitAdvance = async (e) => {
+    e.preventDefault();
+    setAdvErr(''); setAdvNote('');
+    if (!(Number(advForm.amount) > 0) || !(Number(advForm.months) >= 1)) {
+      setAdvErr('Enter at least 1 month and an amount greater than 0.');
+      return;
+    }
+    setAdvBusy(true);
+    try {
+      const { data } = await api.post('/installments/advance', {
+        order_id: id, months: Number(advForm.months), amount: Number(advForm.amount),
+      });
+      await load();
+      if (Number(data.leftover) > 0) {
+        // Clear the amount so the note can't be re-submitted and double-applied.
+        setAdvForm(f => ({ ...f, amount: '' }));
+        setAdvNote(`Applied Rs. ${Number(data.applied).toLocaleString()} across ${data.monthsTargeted} month(s). Rs. ${Number(data.leftover).toLocaleString()} was not applied — no balance left for those months.`);
+      } else {
+        setAdvOpen(false);
+      }
+    } catch (e) { setAdvErr(e?.response?.data?.error || 'Could not record the advance'); }
+    finally { setAdvBusy(false); }
   };
 
   const doDelete = async (inst) => {
@@ -172,13 +206,18 @@ export default function OrderDetail() {
       <div className="flex flex-wrap items-center justify-between gap-2 mt-2 mb-2">
         <div>
           <h3 className="font-semibold text-slate-900">Installment invoices</h3>
-          <span className="text-xs text-slate-500">{paidCount} of {order.total_installments} paid · generate each invoice when you collect it</span>
+          <span className="text-xs text-slate-500">{paidCount} of {order.total_installments} paid · invoices appear automatically each month — use Advance to collect ahead</span>
         </div>
-        {canGenerateNext && (
-          <button onClick={generateNext} disabled={generating} className="btn-primary">
-            {generating ? 'Generating…' : '+ Generate next invoice'}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {remaining > 0 && (
+            <button onClick={openAdvance} className="btn-primary">+ Advance Installment</button>
+          )}
+          {canGenerateNext && (
+            <button onClick={generateNext} disabled={generating} className="btn-secondary">
+              {generating ? 'Generating…' : 'Generate now'}
+            </button>
+          )}
+        </div>
       </div>
       {genErr && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded mb-2">{genErr}</div>}
 
@@ -263,7 +302,7 @@ export default function OrderDetail() {
           </div>
           {selected && Number(pay.amount_paid) >= remainingOf(selected) && remainingOf(selected) > 0 && (
             <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-3 py-2">
-              ✓ This clears the invoice. After saving, click “+ Generate next invoice” when you’re ready to bill the next month.
+              ✓ This clears the invoice. Next month’s invoice appears automatically — or use “Advance Installment” to collect ahead.
             </div>
           )}
           {selected && pay.amount_paid !== '' && Number(pay.amount_paid) > 0 && Number(pay.amount_paid) < remainingOf(selected) && (
@@ -273,7 +312,7 @@ export default function OrderDetail() {
           )}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={() => setPayOpen(false)} className="btn-secondary">Cancel</button>
-            <button className="btn-primary">Record Payment</button>
+            <button className="btn-primary" disabled={paying}>{paying ? 'Saving…' : 'Record Payment'}</button>
           </div>
         </form>
       </Modal>
@@ -295,7 +334,29 @@ export default function OrderDetail() {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={() => setEditOpen(false)} className="btn-secondary">Cancel</button>
-            <button className="btn-primary">Save changes</button>
+            <button className="btn-primary" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={advOpen} onClose={() => setAdvOpen(false)} title="Advance Installment">
+        <form onSubmit={submitAdvance} className="space-y-3">
+          {advErr && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">{advErr}</div>}
+          <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded px-3 py-2">
+            Collect payment ahead of schedule. The upcoming invoices are filled in order — each fully covered month becomes <b>Paid</b>, and the last one stays <b>Partial</b> if the amount runs out. Existing unpaid invoices are filled first.
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Months in advance *</label><input type="number" min="1" required autoFocus className="input" value={advForm.months} onChange={e => setAdvForm(f => ({ ...f, months: e.target.value }))}/></div>
+            <div><label className="label">Amount collected (Rs.) *</label><input type="number" step="0.01" min="0" required className="input" value={advForm.amount} onChange={e => setAdvForm(f => ({ ...f, amount: e.target.value }))}/></div>
+          </div>
+          <div className="text-xs text-slate-500">
+            Full price for {advForm.months || 1} month(s): <b>{fmt(Number(order.installment_amount || 0) * Number(advForm.months || 1))}</b>
+            <button type="button" className="ml-2 text-brand-600" onClick={() => setAdvForm(f => ({ ...f, amount: Number(order.installment_amount || 0) * Number(f.months || 1) }))}>use this</button>
+          </div>
+          {advNote && <div className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-3 py-2">{advNote}</div>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={() => setAdvOpen(false)} className="btn-secondary">Close</button>
+            <button className="btn-primary" disabled={advBusy}>{advBusy ? 'Saving…' : 'Collect Advance'}</button>
           </div>
         </form>
       </Modal>

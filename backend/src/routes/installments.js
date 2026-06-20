@@ -4,6 +4,7 @@ const { supabaseAdmin } = require('../config/supabase');
 const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 const { issueCommand } = require('../services/deviceCommands');
+const { ensureDueInvoices, applyAdvance, recomputeOrderStatus, buildNextRow } = require('../services/installmentEngine');
 
 const router = express.Router();
 router.use(authenticate);
@@ -100,19 +101,14 @@ router.post('/:id/pay', requirePermission('installments.record_payment'), async 
   // it on demand via POST /installments/next (a button on the order page), so
   // there's never a surprise pending invoice right after a payment.
 
-  // Order completion: every created invoice paid AND nothing left to bill
-  // (either the plan length is reached or the balance is cleared).
+  // Order completion is derived by the shared engine helper (single source of
+  // truth so /pay, /advance and edit/delete never disagree). siblings is also
+  // used by the auto-unlock check below.
   const { data: siblings } = await supabaseAdmin
     .from('installments')
     .select('amount_due, amount_paid, status')
     .eq('order_id', inst.order_id);
-  const allPaid = (siblings || []).length > 0 && (siblings || []).every(s => s.status === 'paid');
-  const sumDueAll = (siblings || []).reduce((s, x) => s + Number(x.amount_due || 0), 0);
-  const totalToPay2 = Number(order.total_price) - Number(order.advance_payment || 0) - Number(order.discount || 0);
-  const nothingLeft = (siblings || []).length >= Number(order.total_installments) || (totalToPay2 - sumDueAll) <= 0.009;
-  if (allPaid && nothingLeft) {
-    await supabaseAdmin.from('orders').update({ status: 'completed' }).eq('id', inst.order_id);
-  }
+  await recomputeOrderStatus(inst.order_id, order);
 
   await logActivity({
     userId: req.user.id, branchId: order.branch_id, action: 'record_payment',
@@ -169,26 +165,17 @@ router.post('/next', requirePermission('installments.record_payment'), async (re
   }
 
   const sumDue = (allInst || []).reduce((s, x) => s + Number(x.amount_due || 0), 0);
-  const totalToPay = Number(order.total_price) - Number(order.advance_payment || 0) - Number(order.discount || 0);
-  const remaining = Math.round((totalToPay - sumDue) * 100) / 100;
-  if (remaining <= 0.009) {
+  // Use the shared engine builder so the due date is anchored to order_date +
+  // month number (same as accrual) — never to the payment date, which caused
+  // invoices to bunch onto the same due date.
+  const row = buildNextRow(order, (last?.installment_no || 0) + 1, sumDue);
+  if (!row) {
     return res.status(409).json({ error: 'Nothing left to bill — the balance is already cleared.' });
   }
-
-  const nextAmt = Math.min(Number(order.installment_amount), remaining);
-  const base = last?.payment_date ? dayjs(last.payment_date) : dayjs(order.order_date);
-  const nextDue = clampDueDate(base, 1, order.due_day || 5);
-
-  const { data: created, error } = await supabaseAdmin.from('installments').insert({
-    order_id: orderId,
-    installment_no: (last?.installment_no || 0) + 1,
-    due_date: nextDue.format('YYYY-MM-DD'),
-    amount_due: nextAmt,
-    pre_balance: remaining,
-    balance: Math.max(0, remaining - nextAmt),
-    status: 'pending',
-    recovery_officer: order.recovery_officer || null,
-  }).select().single();
+  const { _due, ...insert } = row;
+  const status = _due.isBefore(dayjs(), 'day') ? 'overdue' : 'pending';
+  const { data: created, error } = await supabaseAdmin.from('installments')
+    .insert({ ...insert, status }).select().single();
   if (error) return res.status(400).json({ error: error.message });
 
   await logActivity({
@@ -197,6 +184,31 @@ router.post('/next', requirePermission('installments.record_payment'), async (re
     details: { order_id: orderId, installment_no: created.installment_no }, req,
   });
   res.status(201).json(created);
+});
+
+// Collect an advance across one or more upcoming months. Creates/updates the
+// invoices in sequence and distributes the amount (engine guarantees no
+// overpay, no gaps, no duplicates). Reflects on the order totals immediately.
+router.post('/advance', requirePermission('installments.record_payment'), async (req, res) => {
+  const { order_id, months, amount } = req.body || {};
+  if (!order_id) return res.status(400).json({ error: 'order_id required' });
+
+  const { data: order } = await supabaseAdmin.from('orders').select('branch_id').eq('id', order_id).single();
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  const scope = scopeBranch(req);
+  if (scope && order.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
+
+  try {
+    const result = await applyAdvance(order_id, months, amount, req.user.id);
+    await logActivity({
+      userId: req.user.id, branchId: order.branch_id, action: 'advance_payment',
+      entityType: 'order', entityId: order_id,
+      details: { months: Number(months), amount: Number(amount), ...result }, req,
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
+  }
 });
 
 router.post('/mark-overdue', requirePermission('installments.record_payment'), async (req, res) => {
@@ -221,23 +233,6 @@ router.post('/mark-overdue', requirePermission('installments.record_payment'), a
   if (error) return res.status(500).json({ error: error.message });
   res.json({ updated: data?.length || 0 });
 });
-
-// Re-derive an order's status from its current installments. Only toggles
-// between 'active' and 'completed' — never touches a cancelled order.
-async function recomputeOrderStatus(orderId, order) {
-  if (order.status !== 'active' && order.status !== 'completed') return;
-  const { data: sibs } = await supabaseAdmin
-    .from('installments').select('amount_due, status').eq('order_id', orderId);
-  const list = sibs || [];
-  const allPaid = list.length > 0 && list.every(s => s.status === 'paid');
-  const sumDue = list.reduce((s, x) => s + Number(x.amount_due || 0), 0);
-  const totalToPay = Number(order.total_price) - Number(order.advance_payment || 0) - Number(order.discount || 0);
-  const nothingLeft = list.length >= Number(order.total_installments) || (totalToPay - sumDue) <= 0.009;
-  const newStatus = (allPaid && nothingLeft) ? 'completed' : 'active';
-  if (newStatus !== order.status) {
-    await supabaseAdmin.from('orders').update({ status: newStatus }).eq('id', orderId);
-  }
-}
 
 // Edit an installment / its payment. Recomputes status and the order status.
 // amount_due (the financed chain) is intentionally NOT editable here.

@@ -2,6 +2,20 @@ const cron = require('node-cron');
 const dayjs = require('dayjs');
 const { supabaseAdmin } = require('../config/supabase');
 const { sendWhatsApp } = require('./whatsapp');
+const { ensureDueInvoices } = require('./installmentEngine');
+
+// Create each month's invoice for every active order once its due-month begins.
+// Idempotent — safe to run daily; only inserts invoices that don't exist yet.
+async function runAccrualJob() {
+  const { data: orders } = await supabaseAdmin.from('orders').select('id').eq('status', 'active');
+  let created = 0;
+  for (const o of orders || []) {
+    try { created += await ensureDueInvoices(o.id); }
+    catch (e) { console.error('[accrual] order', o.id, e.message); }
+  }
+  console.log(`[scheduler] accrual created ${created} invoice(s)`);
+  return created;
+}
 
 function buildReminderMessage({ customerName, amount, dueDate, accountNo }) {
   const due = dayjs(dueDate);
@@ -185,6 +199,13 @@ function startScheduler() {
   cron.schedule('30 9 * * *', () => {
     console.log('[scheduler] running daily reminder job');
     runReminderJob().catch(e => console.error(e));
+  }, opts);
+
+  // Every day at 00:05 — create this month's invoices for active orders, so the
+  // next installment appears (Pending) as soon as its month begins.
+  cron.schedule('5 0 * * *', () => {
+    console.log('[scheduler] running monthly invoice accrual');
+    runAccrualJob().catch(e => console.error(e));
   }, opts);
 
   // Every day at 00:10 — mark overdue

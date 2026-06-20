@@ -4,6 +4,7 @@ const { supabaseAdmin } = require('../config/supabase');
 const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 const { issueCommand } = require('../services/deviceCommands');
+const { ensureDueInvoices } = require('../services/installmentEngine');
 
 const router = express.Router();
 router.use(authenticate);
@@ -46,21 +47,32 @@ router.get('/', async (req, res) => {
 });
 
 router.get('/:id', async (req, res) => {
+  // Authorize BEFORE any side-effect: a quick header fetch + branch/owner check
+  // so an unauthorized caller can never trigger invoice creation on an order.
+  const { data: head, error: headErr } = await supabaseAdmin
+    .from('orders').select('branch_id, customer_id, customers(profile_id)').eq('id', req.params.id).single();
+  if (headErr || !head) return res.status(404).json({ error: 'Order not found' });
+
+  const scope = scopeBranch(req);
+  if (scope && head.branch_id !== scope) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  if (req.user.role === 'customer' && head.customers?.profile_id !== req.user.id) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  // Lazy catch-up (operators/admins only — a customer's read must never mutate
+  // billing data). Best-effort: never block the read if it fails.
+  if (req.user.role !== 'customer') {
+    try { await ensureDueInvoices(req.params.id); } catch (e) { console.warn('[orders/:id] ensureDueInvoices:', e.message); }
+  }
+
   const { data, error } = await supabaseAdmin
     .from('orders')
     .select('*, customers(*, guarantors(*)), products(*), branches(*), installments(*)')
     .eq('id', req.params.id).single();
   if (error) return res.status(404).json({ error: error.message });
-
   if (data?.installments) data.installments.sort((a, b) => a.installment_no - b.installment_no);
-
-  const scope = scopeBranch(req);
-  if (scope && data.branch_id !== scope) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  if (req.user.role === 'customer' && data.customers?.profile_id !== req.user.id) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
   res.json(data);
 });
 
