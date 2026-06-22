@@ -81,11 +81,23 @@ export default function CustomerDetail() {
   );
   if (!customer) return <div className="p-8 text-slate-500">Loading…</div>;
 
+  // Wait for every image in the form (logo + customer photo, which can be a few
+  // MB) to finish loading/decoding before printing — otherwise Chrome captures
+  // the page before the photo renders and it's missing from the PDF.
+  const printForm = async () => {
+    const imgs = Array.from(document.querySelectorAll('.print-form img'));
+    await Promise.all(imgs.map(img => {
+      if (img.complete && img.naturalWidth) return img.decode().catch(() => {});
+      return new Promise(res => { img.onload = res; img.onerror = res; });
+    }));
+    window.print();
+  };
+
   if (showPrint) return (
     <div>
       <div className="p-4 flex gap-2 bg-slate-100 no-print">
         <button onClick={() => setShowPrint(false)} className="btn-secondary">← Back</button>
-        <button onClick={() => window.print()} className="btn-primary">Print / Save PDF</button>
+        <button onClick={printForm} className="btn-primary">Print / Save PDF</button>
       </div>
       <CustomerPrintForm customer={customer} />
     </div>
