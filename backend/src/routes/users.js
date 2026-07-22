@@ -19,6 +19,30 @@ function callerCanGrant(req, perms) {
 // grant permissions the caller lacks. Without this, role_id is a cross-tenant
 // mis-tag and a privilege-escalation vector (a role's permissions are resolved
 // straight from role_permissions, bypassing the inline callerCanGrant check).
+// The base permission bundle a user WOULD have from a given built-in role plus
+// an optional custom role_id (a custom role's grants replace the default bundle).
+async function baseBundleFor(role, roleId) {
+  if (roleId) {
+    const { data: rps } = await supabaseAdmin
+      .from('role_permissions').select('permission_id').eq('role_id', roleId);
+    return (rps || []).map(r => r.permission_id);
+  }
+  return DEFAULT_BUNDLES[role] || [];
+}
+
+// For a non-super caller: the effective permission set a target WOULD end up
+// with (base bundle from the resulting role/role_id, plus any explicit grants)
+// must never exceed the caller's own permissions. Returns the excess (empty =
+// ok). This closes escalation via the IMPLICIT default/role bundle, not just
+// the explicit permissions[] array.
+async function grantExceedsCaller(req, { role, roleId, permissions }) {
+  const callerPerms = req.user.permissions || [];
+  if (callerPerms.includes('*')) return [];
+  const base = await baseBundleFor(role, roleId);
+  const resulting = new Set([...base, ...(Array.isArray(permissions) ? permissions : [])]);
+  return [...resulting].filter(p => !callerPerms.includes(p));
+}
+
 async function validateRoleId(req, roleId) {
   const { data: role } = await supabaseAdmin
     .from('roles').select('company_id').eq('id', roleId).single();
@@ -139,6 +163,12 @@ router.post('/', requirePermission('users.create'), async (req, res) => {
     const rc = await validateRoleId(req, role_id);
     if (!rc.ok) return res.status(rc.status).json({ error: rc.error, missing: rc.missing });
   }
+  // The new user's resulting effective perms (default/role bundle + explicit
+  // grants) must not exceed a non-super caller's own permissions.
+  if (!isSuper) {
+    const excess = await grantExceedsCaller(req, { role, roleId: role_id, permissions });
+    if (excess.length) return res.status(403).json({ error: 'That role grants permissions you do not hold', missing: excess });
+  }
 
   const { data: auth, error: authErr } = await supabaseAdmin.auth.admin.createUser({
     email, password, email_confirm: true,
@@ -201,41 +231,38 @@ router.patch('/:id', requirePermission('users.update'), async (req, res) => {
     }
   }
 
+  const callerIsSuper = req.user.role === 'super_admin';
+  const touchesPrivs = role !== undefined || role_id !== undefined || Array.isArray(permissions);
+
+  // A non-super caller may NEVER change their own role / role_id / permissions
+  // (self-escalation), regardless of which field is used.
+  if (!callerIsSuper && id === req.user.id && touchesPrivs) {
+    return res.status(403).json({ error: 'You cannot change your own role or permissions' });
+  }
+  // Role VALUE whitelist: a non-super can only (de)assign operator/customer —
+  // never admin/super_admin.
+  if (role !== undefined && !callerIsSuper && !['operator', 'customer'].includes(role)) {
+    return res.status(403).json({ error: 'You cannot assign that role' });
+  }
+  // Explicit grants must be grantable, and a custom role_id must be in-company.
   if (Array.isArray(permissions)) {
     const check = callerCanGrant(req, permissions);
     if (!check.ok) return res.status(403).json({ error: 'Cannot grant permissions you do not have', missing: check.missing });
-    // A non-super_admin may not edit their OWN permissions, and the target's
-    // RESULTING effective set (base bundle + grants, once the old overrides are
-    // wiped) must stay within the caller's own permissions. Without this, wiping
-    // super_admin's deny-overrides would silently re-grant the full base bundle,
-    // defeating an intentional restriction and re-granting perms the caller lacks.
-    if (req.user.role !== 'super_admin') {
-      if (id === req.user.id) return res.status(403).json({ error: 'You cannot change your own permissions' });
-      const callerPerms = req.user.permissions || [];
-      if (!callerPerms.includes('*')) {
-        let base = [];
-        if (target?.role_id) {
-          const { data: rps } = await supabaseAdmin.from('role_permissions').select('permission_id').eq('role_id', target.role_id);
-          base = (rps || []).map(r => r.permission_id);
-        } else {
-          base = DEFAULT_BUNDLES[target?.role] || [];
-        }
-        const resulting = new Set([...base, ...permissions]);
-        const exceeds = [...resulting].filter(p => !callerPerms.includes(p));
-        if (exceeds.length) return res.status(403).json({ error: 'This change would grant permissions you do not hold', missing: exceeds });
-      }
-    }
   }
-  // A custom role assignment must stay inside the caller's company and grantable.
   if (role_id) {
     const rc = await validateRoleId(req, role_id);
     if (!rc.ok) return res.status(rc.status).json({ error: rc.error, missing: rc.missing });
   }
-  // Guard the role VALUE, not just the caller: a non-super_admin must never be
-  // able to promote anyone (including themselves) to admin or super_admin — that
-  // would mint a peer/owner or break out of the company entirely.
-  if (role !== undefined && req.user.role !== 'super_admin' && !['operator', 'customer'].includes(role)) {
-    return res.status(403).json({ error: 'You cannot assign that role' });
+  // Whenever privileges change, the target's RESULTING effective perms — the
+  // base bundle from the POST-UPDATE role/role_id, plus explicit grants — must
+  // stay within the caller's own perms. This covers the role-change, role_id
+  // (incl. role_id:null clearing), and permissions[] paths uniformly, closing
+  // the default/role-bundle escalation the explicit-only check used to miss.
+  if (!callerIsSuper && touchesPrivs) {
+    const effRole   = (role !== undefined)    ? role    : (target && target.role);
+    const effRoleId = (role_id !== undefined) ? role_id : (target && target.role_id);
+    const excess = await grantExceedsCaller(req, { role: effRole, roleId: effRoleId, permissions });
+    if (excess.length) return res.status(403).json({ error: 'This change would grant permissions you do not hold', missing: excess });
   }
 
   // Update Auth first — if it fails we don't want a DB row that's out of sync

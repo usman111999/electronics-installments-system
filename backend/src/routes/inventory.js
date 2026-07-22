@@ -45,7 +45,8 @@ router.post('/', requirePermission('inventory.manage'), async (req, res) => {
     if (req.user.company_id !== company_id) return res.status(403).json({ error: 'Branch belongs to another company' });
   }
   const { data: prodCo } = await supabaseAdmin.from('products').select('company_id').eq('id', body.product_id).single();
-  if (prodCo && prodCo.company_id && prodCo.company_id !== company_id) {
+  if (!prodCo) return res.status(400).json({ error: 'Product not found' });
+  if (prodCo.company_id !== company_id) {
     return res.status(400).json({ error: 'Product belongs to a different company' });
   }
 

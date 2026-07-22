@@ -55,21 +55,21 @@ router.get('/:id/detail', requirePermission('branches.view'), async (req, res) =
     custCount, orderCount, invCount,
     usersRes, customersRes, inventoryRes, installmentsRes,
   ] = await Promise.all([
-    supabaseAdmin.from('customers').select('id', { count: 'exact', head: true }).eq('branch_id', id),
-    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('branch_id', id),
-    supabaseAdmin.from('inventory').select('id', { count: 'exact', head: true }).eq('branch_id', id),
+    supabaseAdmin.from('customers').select('id', { count: 'exact', head: true }).eq('branch_id', id).eq('company_id', branch.company_id),
+    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('branch_id', id).eq('company_id', branch.company_id),
+    supabaseAdmin.from('inventory').select('id', { count: 'exact', head: true }).eq('branch_id', id).eq('company_id', branch.company_id),
     supabaseAdmin.from('profiles')
       .select('id, full_name, email, phone, role, is_active, created_at')
       .eq('branch_id', id).eq('company_id', branch.company_id).order('role', { ascending: true }),
     supabaseAdmin.from('customers')
       .select('id, customer_name, account_no, phone_1, picture_url, created_at, orders(count)')
-      .eq('branch_id', id).order('created_at', { ascending: false }).limit(100),
+      .eq('branch_id', id).eq('company_id', branch.company_id).order('created_at', { ascending: false }).limit(100),
     supabaseAdmin.from('inventory')
       .select('id, serial_no, status, created_at, products(name, model, company, base_price)')
-      .eq('branch_id', id).order('created_at', { ascending: false }).limit(100),
+      .eq('branch_id', id).eq('company_id', branch.company_id).order('created_at', { ascending: false }).limit(100),
     supabaseAdmin.from('installments')
-      .select('amount_due, amount_paid, fine, discount, status, orders!inner(branch_id)')
-      .eq('orders.branch_id', id),
+      .select('amount_due, amount_paid, fine, discount, status, orders!inner(branch_id, company_id)')
+      .eq('orders.branch_id', id).eq('orders.company_id', branch.company_id),
   ]);
 
   const insts = installmentsRes.data || [];
