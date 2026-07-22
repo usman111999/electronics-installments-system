@@ -1,7 +1,7 @@
 const express = require('express');
 const dayjs = require('dayjs');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
+const { authenticate, requirePermission, scopeBranch, scopeCompany } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 const { issueCommand } = require('../services/deviceCommands');
 const { ensureDueInvoices } = require('../services/installmentEngine');
@@ -34,6 +34,8 @@ router.get('/', async (req, res) => {
     if (!cust) return res.json([]);
     q = q.eq('customer_id', cust.id);
   } else {
+    const cScope = scopeCompany(req);
+    if (cScope) q = q.eq('company_id', cScope);
     const scope = scopeBranch(req);
     if (scope) q = q.eq('branch_id', scope);
     if (req.query.branch_id && req.user.role === 'admin') q = q.eq('branch_id', req.query.branch_id);
@@ -50,9 +52,13 @@ router.get('/:id', async (req, res) => {
   // Authorize BEFORE any side-effect: a quick header fetch + branch/owner check
   // so an unauthorized caller can never trigger invoice creation on an order.
   const { data: head, error: headErr } = await supabaseAdmin
-    .from('orders').select('branch_id, customer_id, customers(profile_id)').eq('id', req.params.id).single();
+    .from('orders').select('branch_id, company_id, customer_id, customers(profile_id)').eq('id', req.params.id).single();
   if (headErr || !head) return res.status(404).json({ error: 'Order not found' });
 
+  const cScope = scopeCompany(req);
+  if (cScope && head.company_id !== cScope) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const scope = scopeBranch(req);
   if (scope && head.branch_id !== scope) {
     return res.status(403).json({ error: 'Forbidden' });
@@ -93,6 +99,21 @@ router.post('/', requirePermission('orders.create'), async (req, res) => {
     if (!cust || cust.branch_id !== req.user.branch_id) {
       return res.status(403).json({ error: 'Customer not in your branch' });
     }
+  }
+
+  // Resolve the order's company from its branch, and make sure the customer,
+  // the branch and (for a Company Owner) the caller all belong to it — an order
+  // can never straddle two companies.
+  const { data: brRow } = await supabaseAdmin.from('branches').select('company_id').eq('id', branch_id).single();
+  if (!brRow) return res.status(400).json({ error: 'Branch not found' });
+  const company_id = brRow.company_id;
+  if (req.user.company_id && req.user.company_id !== company_id) {
+    return res.status(403).json({ error: 'Branch belongs to another company' });
+  }
+  const { data: custCo } = await supabaseAdmin.from('customers').select('company_id').eq('id', b.customer_id).single();
+  if (!custCo) return res.status(400).json({ error: 'Customer not found' });
+  if (custCo.company_id !== company_id) {
+    return res.status(400).json({ error: 'Customer belongs to a different company' });
   }
 
   // If an inventory item was chosen, reserve it now to avoid double-sell.
@@ -136,6 +157,7 @@ router.post('/', requirePermission('orders.create'), async (req, res) => {
     order_no,
     customer_id: b.customer_id,
     branch_id,
+    company_id,
     product_id: b.product_id || null,
     inventory_id: b.inventory_id || null,
     product_name_snapshot: productSnap.name,
@@ -204,13 +226,15 @@ router.patch('/:id', requirePermission('orders.update'), async (req, res) => {
   delete updates.branch_id;
   delete updates.customer_id;
 
+  delete updates.company_id;
+  const cScope = scopeCompany(req);
   const scope = scopeBranch(req);
-  if (scope) {
+  if (cScope || scope) {
     const { data: existing } = await supabaseAdmin
-      .from('orders').select('branch_id').eq('id', req.params.id).single();
-    if (!existing || existing.branch_id !== scope) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
+      .from('orders').select('branch_id, company_id').eq('id', req.params.id).single();
+    if (!existing) return res.status(403).json({ error: 'Forbidden' });
+    if (cScope && existing.company_id !== cScope) return res.status(403).json({ error: 'Forbidden' });
+    if (scope && existing.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
   }
   const { data, error } = await supabaseAdmin
     .from('orders').update(updates).eq('id', req.params.id).select().single();
@@ -229,6 +253,10 @@ async function loadOrderForLockOp(orderId, user) {
   const { data: order, error } = await supabaseAdmin
     .from('orders').select('*').eq('id', orderId).single();
   if (error || !order) return { error: { status: 404, msg: 'Order not found' } };
+  const cScope = scopeCompany({ user });
+  if (cScope && order.company_id !== cScope) {
+    return { error: { status: 403, msg: 'Forbidden' } };
+  }
   const scope = scopeBranch({ user });
   if (scope && order.branch_id !== scope) {
     return { error: { status: 403, msg: 'Forbidden' } };

@@ -58,7 +58,7 @@ async function authenticate(req, res, next) {
 
     const { data: profile, error: profileErr } = await supabaseAdmin
       .from('profiles')
-      .select('id, full_name, email, phone, role, branch_id, is_active, role_id')
+      .select('id, full_name, email, phone, role, branch_id, company_id, is_active, role_id')
       .eq('id', userData.user.id)
       .single();
 
@@ -106,14 +106,16 @@ function requirePermission(...perms) {
   };
 }
 
-// Nil UUID — a valid uuid that matches no real branch. Used so a branch-scoped
-// user with no branch assigned sees NOTHING rather than falling through to
+// Nil UUID — a valid uuid that matches no real branch/company. Used so a scoped
+// user with nothing assigned sees NOTHING rather than falling through to
 // "no filter = everything".
 const NO_BRANCH = '00000000-0000-0000-0000-000000000000';
+const NO_COMPANY = '00000000-0000-0000-0000-000000000000';
 
 function scopeBranch(req) {
   if (!req.user) return null;
-  // super_admin sees everything by default; admin still global as before.
+  // super_admin sees everything by default; admin (incl. Company Owner) sees all
+  // branches — but only within their own company (see scopeCompany).
   if (req.user.role === 'admin' || req.user.role === 'super_admin') return null;
   // Branch-scoped roles (operator / custom): pin to their branch. If somehow no
   // branch is assigned, return the nil UUID so the query returns zero rows —
@@ -121,11 +123,23 @@ function scopeBranch(req) {
   return req.user.branch_id || NO_BRANCH;
 }
 
+// Company (tenant) scope — the outer boundary above branches.
+//   super_admin           → null  → sees every company
+//   everyone else (admin/operator/custom) → their company_id, pinning them to
+//   one tenant. A non-super user with no company somehow assigned gets the nil
+//   UUID so they see zero rows rather than everything.
+function scopeCompany(req) {
+  if (!req.user) return null;
+  if (req.user.role === 'super_admin') return null;
+  return req.user.company_id || NO_COMPANY;
+}
+
 module.exports = {
   authenticate,
   requireRole,
   requirePermission,
   scopeBranch,
+  scopeCompany,
   invalidateToken,
   invalidateAll,
 };

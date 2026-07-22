@@ -1,6 +1,6 @@
 const express = require('express');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, invalidateAll } = require('../middleware/auth');
+const { authenticate, requirePermission, invalidateAll, scopeCompany } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
@@ -25,8 +25,10 @@ router.get('/', requirePermission('users.view'), async (req, res) => {
     .select('id, full_name, email, phone, role, branch_id, is_active, password_plain, role_id, created_at, branches(name)')
     .order('created_at', { ascending: false });
 
-  // super_admin sees everyone; admin sees everyone (back-compat); operators are
-  // branch-scoped; everyone else needs explicit perms (already gated above).
+  // super_admin sees everyone across all companies; a Company Owner (admin) sees
+  // only their company's staff; operators are further pinned to their branch.
+  const cScope = scopeCompany(req);
+  if (cScope) q = q.eq('company_id', cScope);
   if (req.user.role === 'operator') {
     q = q.eq('branch_id', req.user.branch_id);
   } else if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
@@ -82,6 +84,23 @@ router.post('/', requirePermission('users.create'), async (req, res) => {
     return res.status(400).json({ error: 'branch_id is required for operators and customers' });
   }
 
+  // Resolve the tenant for the new login. Non-super callers are pinned to their
+  // own company; a super_admin derives it from the chosen branch, or takes an
+  // explicit company_id (e.g. when creating a company-level admin).
+  let company_id = req.user.company_id || null;
+  if (!company_id && finalBranchId) {
+    const { data: br } = await supabaseAdmin.from('branches').select('company_id').eq('id', finalBranchId).single();
+    company_id = br?.company_id || null;
+  }
+  if (!company_id && req.body.company_id) company_id = req.body.company_id;
+  // A branch must belong to the resolved company.
+  if (company_id && finalBranchId) {
+    const { data: br } = await supabaseAdmin.from('branches').select('company_id').eq('id', finalBranchId).single();
+    if (br && br.company_id !== company_id) {
+      return res.status(403).json({ error: 'Branch belongs to another company' });
+    }
+  }
+
   // Validate the caller can grant everything they're requesting.
   if (Array.isArray(permissions)) {
     const check = callerCanGrant(req, permissions);
@@ -100,6 +119,7 @@ router.post('/', requirePermission('users.create'), async (req, res) => {
       id: auth.user.id,
       full_name, email, phone, role,
       branch_id: finalBranchId,
+      company_id: company_id || null,
       role_id: role_id || null,
       password_plain: password,
     })
@@ -133,8 +153,13 @@ router.patch('/:id', requirePermission('users.update'), async (req, res) => {
   // edit customers in their own branch. One target lookup covers both checks.
   if (req.user.role !== 'super_admin') {
     const { data: target } = await supabaseAdmin
-      .from('profiles').select('role, branch_id').eq('id', id).single();
+      .from('profiles').select('role, branch_id, company_id').eq('id', id).single();
     if (target?.role === 'super_admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    // A Company Owner may only touch users inside their own company.
+    const cScope = scopeCompany(req);
+    if (cScope && (!target || target.company_id !== cScope)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     if (req.user.role === 'operator' && (!target || target.role !== 'customer' || target.branch_id !== req.user.branch_id)) {
@@ -194,8 +219,10 @@ router.delete('/:id', requirePermission('users.disable'), async (req, res) => {
   const { id } = req.params;
   // A super_admin account can only be disabled by another super_admin.
   if (req.user.role !== 'super_admin') {
-    const { data: target } = await supabaseAdmin.from('profiles').select('role').eq('id', id).single();
+    const { data: target } = await supabaseAdmin.from('profiles').select('role, company_id').eq('id', id).single();
     if (target?.role === 'super_admin') return res.status(403).json({ error: 'Forbidden' });
+    const cScope = scopeCompany(req);
+    if (cScope && (!target || target.company_id !== cScope)) return res.status(403).json({ error: 'Forbidden' });
   }
   await supabaseAdmin.from('profiles').update({ is_active: false }).eq('id', id);
   await supabaseAdmin.auth.admin.updateUserById(id, { ban_duration: '876000h' });

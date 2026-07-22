@@ -1,6 +1,6 @@
 const express = require('express');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
+const { authenticate, requirePermission, scopeBranch, scopeCompany } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
@@ -13,6 +13,8 @@ router.get('/', async (req, res) => {
     .select('*, products(id, name, model, company, base_price, image_url), branches(id, name, code)')
     .order('created_at', { ascending: false });
 
+  const cScope = scopeCompany(req);
+  if (cScope) q = q.eq('company_id', cScope);
   const branchScope = scopeBranch(req);
   if (branchScope) q = q.eq('branch_id', branchScope);
   if (req.query.branch_id && req.user.role === 'admin') q = q.eq('branch_id', req.query.branch_id);
@@ -32,9 +34,22 @@ router.post('/', requirePermission('inventory.manage'), async (req, res) => {
   if (!branch_id) return res.status(400).json({ error: 'branch_id is required' });
   if (!body.product_id) return res.status(400).json({ error: 'product_id is required' });
 
+  // Company follows the branch; block cross-company stock and mismatched product.
+  const { data: brRow } = await supabaseAdmin.from('branches').select('company_id').eq('id', branch_id).single();
+  if (!brRow) return res.status(400).json({ error: 'Branch not found' });
+  const company_id = brRow.company_id;
+  if (req.user.company_id && req.user.company_id !== company_id) {
+    return res.status(403).json({ error: 'Branch belongs to another company' });
+  }
+  const { data: prodCo } = await supabaseAdmin.from('products').select('company_id').eq('id', body.product_id).single();
+  if (prodCo && prodCo.company_id && prodCo.company_id !== company_id) {
+    return res.status(400).json({ error: 'Product belongs to a different company' });
+  }
+
   const { data, error } = await supabaseAdmin.from('inventory').insert({
     product_id: body.product_id,
     branch_id,
+    company_id,
     serial_no: body.serial_no || null,
     cost_price: body.cost_price || null,
     status: body.status || 'in_stock',
@@ -53,14 +68,16 @@ router.patch('/:id', requirePermission('inventory.manage'), async (req, res) => 
   const updates = req.body || {};
   delete updates.id;
 
-  // branch-scoped users can only update inventory in their own branch
+  // company- and branch-scoped users can only update inventory they own
+  delete updates.company_id;
+  const cScope = scopeCompany(req);
   const scope = scopeBranch(req);
-  if (scope) {
+  if (cScope || scope) {
     const { data: existing } = await supabaseAdmin
-      .from('inventory').select('branch_id').eq('id', req.params.id).single();
-    if (!existing || existing.branch_id !== scope) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
+      .from('inventory').select('branch_id, company_id').eq('id', req.params.id).single();
+    if (!existing) return res.status(403).json({ error: 'Forbidden' });
+    if (cScope && existing.company_id !== cScope) return res.status(403).json({ error: 'Forbidden' });
+    if (scope && existing.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
     delete updates.branch_id;
   }
 
@@ -77,13 +94,14 @@ router.patch('/:id', requirePermission('inventory.manage'), async (req, res) => 
 
 router.delete('/:id', requirePermission('inventory.manage'), async (req, res) => {
   const { id } = req.params;
+  const cScope = scopeCompany(req);
   const scope = scopeBranch(req);
-  if (scope) {
+  if (cScope || scope) {
     const { data: existing } = await supabaseAdmin
-      .from('inventory').select('branch_id').eq('id', id).single();
-    if (!existing || existing.branch_id !== scope) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
+      .from('inventory').select('branch_id, company_id').eq('id', id).single();
+    if (!existing) return res.status(403).json({ error: 'Forbidden' });
+    if (cScope && existing.company_id !== cScope) return res.status(403).json({ error: 'Forbidden' });
+    if (scope && existing.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
   }
   const { error } = await supabaseAdmin.from('inventory').delete().eq('id', id);
   if (error) return res.status(400).json({ error: error.message });

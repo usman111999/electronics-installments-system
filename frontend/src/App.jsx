@@ -23,6 +23,7 @@ import Devices from './pages/Devices';
 import SuperAdmins from './pages/super-admin/Admins';
 import SuperPhones from './pages/super-admin/Phones';
 import SuperOverview from './pages/super-admin/Overview';
+import SuperCompanies from './pages/super-admin/Companies';
 
 import CustomerHome from './pages/customer/CustomerHome';
 import CustomerInstallments from './pages/customer/CustomerInstallments';
@@ -64,6 +65,7 @@ export default function App() {
 
       {/* Super Admin only */}
       <Route element={<ProtectedRoute roles={['super_admin']}><Layout /></ProtectedRoute>}>
+        <Route path="/super-admin/companies" element={<SuperCompanies />} />
         <Route path="/super-admin/admins" element={<SuperAdmins />} />
         <Route path="/super-admin/phones" element={<SuperPhones />} />
         <Route path="/super-admin/overview" element={<SuperOverview />} />

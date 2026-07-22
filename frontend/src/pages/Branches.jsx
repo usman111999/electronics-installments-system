@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/PageHeader';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Branches() {
+  const { user } = useAuth();
+  const isSuper = user?.role === 'super_admin';
+  const [companies, setCompanies] = useState([]);
   const [list, setList] = useState([]);
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState(null);
@@ -21,6 +25,12 @@ export default function Branches() {
     setList(data);
   };
   useEffect(() => { load(); }, []);
+  // Only a super_admin picks which company a new branch belongs to; a Company
+  // Owner's branches implicitly land in their own company (backend fills it).
+  useEffect(() => {
+    if (!isSuper) return;
+    api.get('/companies').then(({ data }) => setCompanies(Array.isArray(data) ? data : [])).catch(() => {});
+  }, [isSuper]);
 
   const closeModal = () => { setOpen(false); setEdit(null); setForm({}); setErr(''); };
 
@@ -111,6 +121,16 @@ export default function Branches() {
       <Modal open={open} onClose={closeModal} title={edit ? 'Edit Branch' : 'New Branch'}>
         <form onSubmit={submit} className="space-y-3">
           {err && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">{err}</div>}
+          {isSuper && !edit && (
+            <div>
+              <label className="label">Company *</label>
+              <select className="input" required value={form.company_id || ''}
+                onChange={e => setForm(f => ({ ...f, company_id: e.target.value }))}>
+                <option value="">Select company…</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">Name *</label><input className="input" required placeholder="e.g. Sialkot Main Branch" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}/></div>
             <div><label className="label">Code</label><input className="input" placeholder="e.g. 03" value={form.code || ''} onChange={e => setForm(f => ({ ...f, code: e.target.value }))}/></div>

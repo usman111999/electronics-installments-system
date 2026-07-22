@@ -1,18 +1,35 @@
 const express = require('express');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
+const { authenticate, requirePermission, scopeBranch, scopeCompany } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
 
 router.use(authenticate);
 
-// GET /branches - admin sees all; operator sees own
+// Assert a branch is inside the caller's company (no-op for super_admin).
+// Returns true if allowed; on failure it has already sent the 403/404 response.
+async function guardBranchCompany(req, res, id) {
+  const cScope = scopeCompany(req);
+  if (!cScope) return true; // super_admin
+  const { data } = await supabaseAdmin.from('branches').select('company_id').eq('id', id).single();
+  if (!data) { res.status(404).json({ error: 'Branch not found' }); return false; }
+  if (data.company_id !== cScope) { res.status(403).json({ error: 'Forbidden — not your company' }); return false; }
+  return true;
+}
+
+// GET /branches - super_admin sees all; a Company Owner sees all branches in
+// their company; an operator sees only their own branch.
 router.get('/', async (req, res) => {
   let q = supabaseAdmin.from('branches').select('*').order('created_at', { ascending: false });
-  // super_admin and admin see all branches; everyone else is pinned to their own.
+  // Pin to the caller's company (null for super_admin = every company).
+  const cScope = scopeCompany(req);
+  if (cScope) q = q.eq('company_id', cScope);
+  // super_admin lets an admin drill into one company via ?company_id.
+  if (req.query.company_id && req.user.role === 'super_admin') q = q.eq('company_id', req.query.company_id);
+  // operators / custom roles are further pinned to their single branch.
   if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
-    q = q.eq('id', req.user.branch_id);
+    q = q.eq('id', req.user.branch_id || '00000000-0000-0000-0000-000000000000');
   }
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
@@ -30,6 +47,9 @@ router.get('/:id/detail', requirePermission('branches.view'), async (req, res) =
   const { data: branch, error: bErr } = await supabaseAdmin
     .from('branches').select('*').eq('id', id).single();
   if (bErr || !branch) return res.status(404).json({ error: 'Branch not found' });
+  // Company Owners may only open branches inside their own company.
+  const cScope = scopeCompany(req);
+  if (cScope && branch.company_id !== cScope) return res.status(403).json({ error: 'Forbidden — not your company' });
 
   const [
     custCount, orderCount, invCount,
@@ -86,10 +106,17 @@ router.post('/', requirePermission('branches.create'), async (req, res) => {
   const { name, code, address, city, phone, manager_name, auto_lock_days } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name is required' });
 
+  // A Company Owner's branch always lands in their own company; a super_admin
+  // must say which company it belongs to.
+  const company_id = req.user.role === 'super_admin'
+    ? (req.body.company_id || null)
+    : req.user.company_id;
+  if (!company_id) return res.status(400).json({ error: 'company_id is required' });
+
   const { data, error } = await supabaseAdmin
     .from('branches')
     .insert({
-      name, code, address, city, phone, manager_name,
+      name, code, address, city, phone, manager_name, company_id,
       auto_lock_days: auto_lock_days === '' || auto_lock_days == null ? null : Number(auto_lock_days),
     })
     .select()
@@ -106,8 +133,10 @@ router.post('/', requirePermission('branches.create'), async (req, res) => {
 
 router.patch('/:id', requirePermission('branches.update'), async (req, res) => {
   const { id } = req.params;
+  if (!(await guardBranchCompany(req, res, id))) return;
   const updates = req.body || {};
-  delete updates.id;
+  // Never let a company's branch be moved to another company via a stray field.
+  ['id', 'company_id'].forEach(k => delete updates[k]);
 
   const { data, error } = await supabaseAdmin
     .from('branches').update(updates).eq('id', id).select().single();
@@ -127,6 +156,7 @@ router.patch('/:id', requirePermission('branches.update'), async (req, res) => {
 // (their branch_id is set to null).
 router.delete('/:id', requirePermission('branches.delete'), async (req, res) => {
   const { id } = req.params;
+  if (!(await guardBranchCompany(req, res, id))) return;
 
   const { data: branch } = await supabaseAdmin
     .from('branches').select('id, name').eq('id', id).single();
@@ -161,6 +191,7 @@ router.delete('/:id', requirePermission('branches.delete'), async (req, res) => 
 // this dedicated route is a convenience for the list's Disable/Enable button.
 router.post('/:id/active', requirePermission('branches.update'), async (req, res) => {
   const { id } = req.params;
+  if (!(await guardBranchCompany(req, res, id))) return;
   const is_active = !!(req.body || {}).is_active;
   const { data, error } = await supabaseAdmin
     .from('branches').update({ is_active }).eq('id', id).select().single();

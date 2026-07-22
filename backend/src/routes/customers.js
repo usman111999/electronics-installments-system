@@ -1,6 +1,6 @@
 const express = require('express');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, requireRole, scopeBranch } = require('../middleware/auth');
+const { authenticate, requirePermission, requireRole, scopeBranch, scopeCompany } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
@@ -34,6 +34,8 @@ router.get('/', async (req, res) => {
     .select('*, branches(id, name, code), guarantors(*), orders(count)')
     .order('created_at', { ascending: false });
 
+  const cScope = scopeCompany(req);
+  if (cScope) q = q.eq('company_id', cScope);
   const scope = scopeBranch(req);
   if (scope) q = q.eq('branch_id', scope);
   if (req.query.branch_id && req.user.role === 'admin') q = q.eq('branch_id', req.query.branch_id);
@@ -60,6 +62,11 @@ router.get('/:id', async (req, res) => {
   if (req.user.role === 'customer' && data.profile_id !== req.user.id) {
     return res.status(403).json({ error: 'Forbidden' });
   }
+  // A Company Owner may only open customers inside their company.
+  const cScope = scopeCompany(req);
+  if (cScope && data.company_id !== cScope) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   // Any branch-scoped role (operator or custom) may only open a customer in
   // their own branch.
   const scope = scopeBranch(req);
@@ -77,6 +84,17 @@ router.post('/', requirePermission('customers.manage'), async (req, res) => {
   if (!branch_id) return res.status(400).json({ error: 'branch_id required' });
   if (!body.customer_name) return res.status(400).json({ error: 'customer_name required' });
   if (!body.phone_1) return res.status(400).json({ error: 'phone_1 required' });
+
+  // A customer's company follows its branch. Non-super users are pinned to their
+  // own company; a super_admin inherits whichever company the branch belongs to.
+  let company_id = req.user.company_id || null;
+  const { data: brRow } = await supabaseAdmin.from('branches').select('company_id').eq('id', branch_id).single();
+  if (!brRow) return res.status(400).json({ error: 'Branch not found' });
+  if (company_id && brRow.company_id !== company_id) {
+    return res.status(403).json({ error: 'Branch belongs to another company' });
+  }
+  company_id = company_id || brRow.company_id;
+  if (!company_id) return res.status(400).json({ error: 'Could not resolve company for this branch' });
 
   // Optionally create a login for the customer
   let profile_id = null;
@@ -96,6 +114,7 @@ router.post('/', requirePermission('customers.manage'), async (req, res) => {
       phone: body.phone_1,
       role: 'customer',
       branch_id,
+      company_id,
       password_plain: body.password,
     });
     if (profErr) {
@@ -108,6 +127,7 @@ router.post('/', requirePermission('customers.manage'), async (req, res) => {
   const customerInsert = {
     profile_id,
     branch_id,
+    company_id,
     account_no: body.account_no || await nextAccountNo(),
     customer_name: body.customer_name,
     father_husband_name: body.father_husband_name,
@@ -175,15 +195,16 @@ router.patch('/:id', requirePermission('customers.manage'), async (req, res) => 
   const guarantors = updates.guarantors;
   // Strip joined relations / server-managed fields — these are not columns on
   // the customers table and Postgres rejects the whole update if they're sent.
-  ['guarantors', 'orders', 'branches', 'id', 'created_at', 'updated_at'].forEach(k => delete updates[k]);
+  ['guarantors', 'orders', 'branches', 'id', 'company_id', 'created_at', 'updated_at'].forEach(k => delete updates[k]);
 
+  const cScope = scopeCompany(req);
   const scope = scopeBranch(req);
-  if (scope) {
+  if (cScope || scope) {
     const { data: existing } = await supabaseAdmin
-      .from('customers').select('branch_id').eq('id', id).single();
-    if (!existing || existing.branch_id !== scope) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
+      .from('customers').select('branch_id, company_id').eq('id', id).single();
+    if (!existing) return res.status(403).json({ error: 'Forbidden' });
+    if (cScope && existing.company_id !== cScope) return res.status(403).json({ error: 'Forbidden' });
+    if (scope && existing.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
     delete updates.branch_id;
   }
 
@@ -225,8 +246,10 @@ router.delete('/:id', requireRole('admin', 'super_admin'), async (req, res) => {
   const force = req.query.force === 'true' || req.query.force === '1';
 
   const { data: existing } = await supabaseAdmin
-    .from('customers').select('id, customer_name, profile_id').eq('id', id).single();
+    .from('customers').select('id, customer_name, profile_id, company_id').eq('id', id).single();
   if (!existing) return res.status(404).json({ error: 'Customer not found' });
+  const cScope = scopeCompany(req);
+  if (cScope && existing.company_id !== cScope) return res.status(403).json({ error: 'Forbidden — not your company' });
 
   // Load the customer's orders up front so we can report the count and log them.
   const { data: orders, error: ordErr } = await supabaseAdmin

@@ -1,5 +1,5 @@
 const express = require('express');
-const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
+const { authenticate, requirePermission, scopeBranch, scopeCompany } = require('../middleware/auth');
 const { runReminderJob } = require('../services/scheduler');
 const { sendWhatsApp } = require('../services/whatsapp');
 const { supabaseAdmin } = require('../config/supabase');
@@ -35,9 +35,11 @@ router.get('/notifications', requirePermission('whatsapp.view'), async (req, res
   // Use !inner so the branch filter is actually applied to parent rows.
   // Covers operators AND custom branch-scoped roles via scopeBranch.
   const scope = scopeBranch(req);
-  const joinSpec = scope
-    ? 'customers!inner(customer_name, account_no, branch_id)'
-    : 'customers(customer_name, account_no, branch_id)';
+  const cScope = scopeCompany(req);
+  const needInner = scope || cScope;
+  const joinSpec = needInner
+    ? 'customers!inner(customer_name, account_no, branch_id, company_id)'
+    : 'customers(customer_name, account_no, branch_id, company_id)';
 
   let q = supabaseAdmin
     .from('whatsapp_notifications')
@@ -45,9 +47,8 @@ router.get('/notifications', requirePermission('whatsapp.view'), async (req, res
     .order('created_at', { ascending: false })
     .limit(Math.min(Number(req.query.limit) || 200, 1000));
 
-  if (scope) {
-    q = q.eq('customers.branch_id', scope);
-  }
+  if (cScope) q = q.eq('customers.company_id', cScope);
+  if (scope) q = q.eq('customers.branch_id', scope);
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);

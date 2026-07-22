@@ -7,7 +7,7 @@ const dayjs = require('dayjs');
 const rateLimit = require('express-rate-limit');
 
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
+const { authenticate, requirePermission, scopeBranch, scopeCompany } = require('../middleware/auth');
 const { verifyDeviceSignature } = require('../services/deviceHmac');
 const { issueCommand } = require('../services/deviceCommands');
 const { sendWhatsApp } = require('../services/whatsapp');
@@ -38,9 +38,12 @@ router.post('/enrollment-tokens', authenticate, requirePermission('devices.enrol
   if (!order_id) return res.status(400).json({ error: 'order_id required' });
 
   const { data: order, error: orderErr } = await supabaseAdmin
-    .from('orders').select('id, branch_id, customer_id, order_no').eq('id', order_id).single();
+    .from('orders').select('id, branch_id, company_id, customer_id, order_no').eq('id', order_id).single();
   if (orderErr || !order) return res.status(404).json({ error: 'Order not found' });
 
+  if (scopeCompany(req) && order.company_id !== scopeCompany(req)) {
+    return res.status(403).json({ error: 'Order is not in your company' });
+  }
   if (scopeBranch(req) && order.branch_id !== scopeBranch(req)) {
     return res.status(403).json({ error: 'Order is not in your branch' });
   }
@@ -54,6 +57,7 @@ router.post('/enrollment-tokens', authenticate, requirePermission('devices.enrol
     .insert({
       order_id: order.id,
       branch_id: order.branch_id,
+      company_id: order.company_id,
       device_secret,
       enrollment_token,
       enrollment_token_expires_at: expires_at,
@@ -321,6 +325,10 @@ router.get('/', authenticate, requirePermission('devices.view'), async (req, res
     .select('*, orders(id, order_no, device_locked, customer_id, customers(customer_name, phone_1, account_no)), branches(id, name)')
     .order('last_seen_at', { ascending: false, nullsFirst: false });
 
+  // Company boundary is absolute — even devices.global_view only widens to all
+  // branches WITHIN the caller's own company.
+  const cScope = scopeCompany(req);
+  if (cScope) q = q.eq('company_id', cScope);
   // Branch scope by default; users with devices.global_view can opt out via ?global=1
   const perms = req.user.permissions || [];
   const wantsGlobal = req.query.global === '1' && (perms.includes('*') || perms.includes('devices.global_view'));
@@ -346,6 +354,9 @@ router.get('/:imei/status', authenticate, requirePermission('devices.view'), asy
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   if (!device) return res.status(404).json({ error: 'Device not found' });
+  if (scopeCompany(req) && device.company_id !== scopeCompany(req)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   if (scopeBranch(req) && device.branch_id !== scopeBranch(req)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -371,9 +382,12 @@ router.get('/:imei/status', authenticate, requirePermission('devices.view'), asy
 
 router.get('/:imei/locations', authenticate, requirePermission('devices.view'), async (req, res) => {
   const { data: device, error } = await supabaseAdmin
-    .from('devices').select('id, branch_id').eq('imei', req.params.imei).maybeSingle();
+    .from('devices').select('id, branch_id, company_id').eq('imei', req.params.imei).maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   if (!device) return res.status(404).json({ error: 'Device not found' });
+  if (scopeCompany(req) && device.company_id !== scopeCompany(req)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   if (scopeBranch(req) && device.branch_id !== scopeBranch(req)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -395,8 +409,11 @@ router.get('/:imei/locations', authenticate, requirePermission('devices.view'), 
 // Lock event history for a device (used by the Devices detail modal)
 router.get('/:imei/events', authenticate, requirePermission('devices.view'), async (req, res) => {
   const { data: device } = await supabaseAdmin
-    .from('devices').select('id, order_id, branch_id').eq('imei', req.params.imei).maybeSingle();
+    .from('devices').select('id, order_id, branch_id, company_id').eq('imei', req.params.imei).maybeSingle();
   if (!device) return res.status(404).json({ error: 'Device not found' });
+  if (scopeCompany(req) && device.company_id !== scopeCompany(req)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   if (scopeBranch(req) && device.branch_id !== scopeBranch(req)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -426,6 +443,9 @@ router.post('/:imei/locate', authenticate, requirePermission('devices.locate'), 
   const { data: device } = await supabaseAdmin
     .from('devices').select('*, orders(*)').eq('imei', req.params.imei).maybeSingle();
   if (!device) return res.status(404).json({ error: 'Device not found' });
+  if (scopeCompany(req) && device.company_id !== scopeCompany(req)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   if (scopeBranch(req) && device.branch_id !== scopeBranch(req)) {
     return res.status(403).json({ error: 'Forbidden' });
   }

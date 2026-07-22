@@ -23,7 +23,7 @@ router.post('/login', async (req, res) => {
 
   const { data: profile, error: profileErr } = await supabaseAdmin
     .from('profiles')
-    .select('id, full_name, email, phone, role, branch_id, is_active, role_id')
+    .select('id, full_name, email, phone, role, branch_id, company_id, is_active, role_id')
     .eq('id', data.user.id)
     .single();
 
@@ -75,8 +75,17 @@ router.get('/me', authenticate, async (req, res) => {
       .single();
     branch = data;
   }
+  let company = null;
+  if (req.user.company_id) {
+    const { data } = await supabaseAdmin
+      .from('companies')
+      .select('id, name, code, logo_url')
+      .eq('id', req.user.company_id)
+      .single();
+    company = data;
+  }
   // req.user.permissions is already populated by authenticate middleware
-  res.json({ user: req.user, branch });
+  res.json({ user: req.user, branch, company });
 });
 
 module.exports = router;

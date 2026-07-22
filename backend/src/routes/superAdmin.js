@@ -31,7 +31,7 @@ router.get('/admins', async (_req, res) => {
 });
 
 router.post('/admins', async (req, res) => {
-  const { email, password, full_name, phone, permissions } = req.body || {};
+  const { email, password, full_name, phone, permissions, company_id } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
 
   const { data: auth, error: authErr } = await supabaseAdmin.auth.admin.createUser({
@@ -47,6 +47,9 @@ router.post('/admins', async (req, res) => {
       full_name, email, phone,
       role: 'admin',
       branch_id: null,
+      // Tie the admin to a company (Company Owner). Null = a global admin that,
+      // under the tenant model, is scoped to nothing until assigned a company.
+      company_id: company_id || null,
       password_plain: password,
       is_active: true,
     })

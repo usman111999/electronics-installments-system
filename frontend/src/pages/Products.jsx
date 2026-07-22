@@ -9,9 +9,11 @@ import { useAuth } from '../context/AuthContext';
 export default function Products() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const isSuper = user?.role === 'super_admin';
   const [list, setList] = useState([]);
   const [stock, setStock] = useState({}); // product_id -> in-stock unit count
   const [branches, setBranches] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [search, setSearch] = useState('');
 
   // Product add/edit modal
@@ -46,6 +48,12 @@ export default function Products() {
     }
   };
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [search]);
+  // super_admin must say which company a product belongs to (a Company Owner's
+  // products auto-land in their own company).
+  useEffect(() => {
+    if (!isSuper) return;
+    api.get('/companies').then(({ data }) => setCompanies(Array.isArray(data) ? data : [])).catch(() => {});
+  }, [isSuper]);
 
   const closeModal = () => { setOpen(false); setEdit(null); setForm({}); setErr(''); };
 
@@ -134,6 +142,16 @@ export default function Products() {
       <Modal open={open} onClose={closeModal} title={edit ? 'Edit Product' : 'New Product'} size="lg">
         <form onSubmit={submit} className="space-y-3">
           {err && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">{err}</div>}
+          {isSuper && !edit && (
+            <div>
+              <label className="label">Company *</label>
+              <select className="input" required value={form.company_id || ''}
+                onChange={e => setForm(f => ({ ...f, company_id: e.target.value }))}>
+                <option value="">Select company…</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><ImageUpload value={form.image_url || ''} onChange={(url) => setForm(f => ({ ...f, image_url: url }))} bucket="product-images" label="Product Image" /></div>
             <div><label className="label">Name *</label><input required className="input" placeholder="e.g. LED TV" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}/></div>

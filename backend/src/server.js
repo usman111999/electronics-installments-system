@@ -21,6 +21,7 @@ const uploadsRoutes = require('./routes/uploads');
 const devicesRoutes = require('./routes/devices');
 const superAdminRoutes = require('./routes/superAdmin');
 const rolesRoutes = require('./routes/roles');
+const companiesRoutes = require('./routes/companies');
 
 const { startScheduler } = require('./services/scheduler');
 
@@ -80,6 +81,7 @@ app.use('/api/uploads', uploadsRoutes);
 app.use('/api/devices', devicesRoutes);
 app.use('/api/super-admin', superAdminRoutes);
 app.use('/api/roles', rolesRoutes);
+app.use('/api/companies', companiesRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error('[error]', err);

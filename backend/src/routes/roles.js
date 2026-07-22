@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, invalidateAll, scopeBranch } = require('../middleware/auth');
+const { authenticate, requirePermission, invalidateAll, scopeBranch, scopeCompany } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 
 const router = express.Router();
@@ -28,6 +28,9 @@ router.get('/', requirePermission('roles.view'), async (req, res) => {
     .select('*, branches(id, name)')
     .order('created_at', { ascending: false });
 
+  // Company Owners and their staff only see roles inside their own company.
+  const cScope = scopeCompany(req);
+  if (cScope) q = q.eq('company_id', cScope);
   if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
     if (req.user.branch_id) {
       q = q.or(`branch_id.is.null,branch_id.eq.${req.user.branch_id}`);
@@ -61,6 +64,10 @@ router.get('/:id', requirePermission('roles.view'), async (req, res) => {
   const { data: role, error } = await supabaseAdmin
     .from('roles').select('*, branches(id, name)').eq('id', req.params.id).single();
   if (error) return res.status(404).json({ error: error.message });
+  const cScope = scopeCompany(req);
+  if (cScope && role.company_id !== cScope) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   // Branch-scoped users may only view global roles or roles in their own branch.
   const scope = scopeBranch(req);
   if (scope && role.branch_id && role.branch_id !== scope) {
@@ -82,6 +89,8 @@ router.post('/', requirePermission('roles.manage'), async (req, res) => {
   const check = callerCanGrant(req, perms);
   if (!check.ok) return res.status(403).json({ error: 'Cannot grant permissions you do not have', missing: check.missing });
 
+  const company_id = req.user.role === 'super_admin' ? (req.body.company_id || null) : req.user.company_id;
+
   const { data: role, error } = await supabaseAdmin
     .from('roles').insert({
       name,
@@ -89,6 +98,7 @@ router.post('/', requirePermission('roles.manage'), async (req, res) => {
       description: description || null,
       base_role,
       branch_id: branch_id || null,
+      company_id,
       created_by: req.user.id,
     }).select().single();
   if (error) return res.status(400).json({ error: error.message });
@@ -114,6 +124,8 @@ router.patch('/:id', requirePermission('roles.manage'), async (req, res) => {
   const { data: existing } = await supabaseAdmin.from('roles').select('*').eq('id', id).single();
   if (!existing) return res.status(404).json({ error: 'Role not found' });
   if (existing.is_system) return res.status(400).json({ error: 'System role is immutable' });
+  const cScope = scopeCompany(req);
+  if (cScope && existing.company_id !== cScope) return res.status(403).json({ error: 'Forbidden — not your company' });
 
   if (Array.isArray(permissions)) {
     const check = callerCanGrant(req, permissions);
@@ -152,9 +164,11 @@ router.patch('/:id', requirePermission('roles.manage'), async (req, res) => {
 
 router.delete('/:id', requirePermission('roles.manage'), async (req, res) => {
   const { id } = req.params;
-  const { data: existing } = await supabaseAdmin.from('roles').select('id, is_system').eq('id', id).single();
+  const { data: existing } = await supabaseAdmin.from('roles').select('id, is_system, company_id').eq('id', id).single();
   if (!existing) return res.status(404).json({ error: 'Role not found' });
   if (existing.is_system) return res.status(400).json({ error: 'System role cannot be deleted' });
+  const cScope = scopeCompany(req);
+  if (cScope && existing.company_id !== cScope) return res.status(403).json({ error: 'Forbidden — not your company' });
 
   // Reject delete if any profile is still pointing at this role (§5 QA #9).
   const { count: assignedCount } = await supabaseAdmin

@@ -1,7 +1,7 @@
 const express = require('express');
 const dayjs = require('dayjs');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
+const { authenticate, requirePermission, scopeBranch, scopeCompany } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
 const { issueCommand } = require('../services/deviceCommands');
 const { ensureDueInvoices, applyAdvance, recomputeOrderStatus, buildNextRow } = require('../services/installmentEngine');
@@ -23,7 +23,7 @@ function clampDueDate(base, monthsAhead, requestedDay) {
 router.get('/', async (req, res) => {
   let q = supabaseAdmin
     .from('installments')
-    .select('*, orders!inner(id, order_no, branch_id, customer_id, total_installments, branches(name), customers(id, customer_name, account_no, phone_1, picture_url))')
+    .select('*, orders!inner(id, order_no, branch_id, company_id, customer_id, total_installments, branches(name), customers(id, customer_name, account_no, phone_1, picture_url))')
     .order('due_date', { ascending: true });
 
   if (req.user.role === 'customer') {
@@ -32,6 +32,8 @@ router.get('/', async (req, res) => {
     if (!cust) return res.json([]);
     q = q.eq('orders.customer_id', cust.id);
   } else {
+    const cScope = scopeCompany(req);
+    if (cScope) q = q.eq('orders.company_id', cScope);
     const scope = scopeBranch(req);
     if (scope) q = q.eq('orders.branch_id', scope);
     if (req.query.order_id) q = q.eq('order_id', req.query.order_id);
@@ -57,6 +59,10 @@ router.post('/:id/pay', requirePermission('installments.record_payment'), async 
     .from('installments').select('*, orders(*)').eq('id', id).single();
   if (instErr || !inst) return res.status(404).json({ error: 'Installment not found' });
   const order = inst.orders;
+  const payCScope = scopeCompany(req);
+  if (payCScope && order.company_id !== payCScope) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const payScope = scopeBranch(req);
   if (payScope && order.branch_id !== payScope) {
     return res.status(403).json({ error: 'Forbidden' });
@@ -148,6 +154,10 @@ router.post('/next', requirePermission('installments.record_payment'), async (re
 
   const { data: order } = await supabaseAdmin.from('orders').select('*').eq('id', orderId).single();
   if (!order) return res.status(404).json({ error: 'Order not found' });
+  const nextCScope = scopeCompany(req);
+  if (nextCScope && order.company_id !== nextCScope) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const nextScope = scopeBranch(req);
   if (nextScope && order.branch_id !== nextScope) {
     return res.status(403).json({ error: 'Forbidden' });
@@ -193,8 +203,10 @@ router.post('/advance', requirePermission('installments.record_payment'), async 
   const { order_id, months, amount } = req.body || {};
   if (!order_id) return res.status(400).json({ error: 'order_id required' });
 
-  const { data: order } = await supabaseAdmin.from('orders').select('branch_id').eq('id', order_id).single();
+  const { data: order } = await supabaseAdmin.from('orders').select('branch_id, company_id').eq('id', order_id).single();
   if (!order) return res.status(404).json({ error: 'Order not found' });
+  const advCScope = scopeCompany(req);
+  if (advCScope && order.company_id !== advCScope) return res.status(403).json({ error: 'Forbidden' });
   const scope = scopeBranch(req);
   if (scope && order.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
 
@@ -219,12 +231,15 @@ router.post('/mark-overdue', requirePermission('installments.record_payment'), a
     .lt('due_date', today)
     .in('status', ['pending', 'partial']);
 
-  // Branch-scoped users only flip overdue status within their own branch.
+  // Company/branch-scoped users only flip overdue status within their own scope.
+  const cScope = scopeCompany(req);
   const scope = scopeBranch(req);
-  if (scope) {
-    const { data: ordersInBranch } = await supabaseAdmin
-      .from('orders').select('id').eq('branch_id', scope);
-    const ids = (ordersInBranch || []).map(o => o.id);
+  if (cScope || scope) {
+    let oq = supabaseAdmin.from('orders').select('id');
+    if (cScope) oq = oq.eq('company_id', cScope);
+    if (scope) oq = oq.eq('branch_id', scope);
+    const { data: ordersInScope } = await oq;
+    const ids = (ordersInScope || []).map(o => o.id);
     if (!ids.length) return res.json({ updated: 0 });
     q = q.in('order_id', ids);
   }
@@ -244,6 +259,8 @@ router.patch('/:id', requirePermission('installments.record_payment'), async (re
     .from('installments').select('*, orders(*)').eq('id', id).single();
   if (instErr || !inst) return res.status(404).json({ error: 'Installment not found' });
   const order = inst.orders;
+  const cScope = scopeCompany(req);
+  if (cScope && order.company_id !== cScope) return res.status(403).json({ error: 'Forbidden' });
   const scope = scopeBranch(req);
   if (scope && order.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
 
@@ -295,6 +312,8 @@ router.delete('/:id', requirePermission('installments.record_payment'), async (r
     .from('installments').select('*, orders(*)').eq('id', id).single();
   if (instErr || !inst) return res.status(404).json({ error: 'Installment not found' });
   const order = inst.orders;
+  const cScope = scopeCompany(req);
+  if (cScope && order.company_id !== cScope) return res.status(403).json({ error: 'Forbidden' });
   const scope = scopeBranch(req);
   if (scope && order.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
 

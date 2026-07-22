@@ -102,6 +102,7 @@ const NAV = [
   { section: 'Admin', label: 'Roles',    to: '/roles',    icon: ICONS.roles,    requires: 'roles.view' },
 
   // Super Admin (only visible when caller has these perms — super_admin gets '*')
+  { section: 'Super Admin', label: 'Companies',       to: '/super-admin/companies', icon: ICONS.branches, requires: 'companies.manage' },
   { section: 'Super Admin', label: 'System Overview', to: '/super-admin/overview', icon: ICONS.globe,   requires: 'stats.global_view' },
   { section: 'Super Admin', label: 'Admins',          to: '/super-admin/admins',   icon: ICONS.shield,  requires: 'admins.manage' },
   { section: 'Super Admin', label: 'Phones Registry', to: '/super-admin/phones',   icon: ICONS.devices, requires: 'devices.global_view' },

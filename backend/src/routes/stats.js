@@ -1,7 +1,7 @@
 const express = require('express');
 const dayjs = require('dayjs');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
+const { authenticate, requirePermission, scopeBranch, scopeCompany } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authenticate);
@@ -9,10 +9,12 @@ router.use(authenticate);
 // GET /stats/overview - dashboard KPIs
 router.get('/overview', requirePermission('stats.view'), async (req, res) => {
   const scope = scopeBranch(req);
+  const companyFilter = scopeCompany(req);
   const branchFilter = req.query.branch_id && req.user.role === 'admin' ? req.query.branch_id : scope;
 
   // Orders aggregate
   let ordersQ = supabaseAdmin.from('orders').select('total_price, advance_payment, discount, status, branch_id', { count: 'exact' });
+  if (companyFilter) ordersQ = ordersQ.eq('company_id', companyFilter);
   if (branchFilter) ordersQ = ordersQ.eq('branch_id', branchFilter);
   const { data: orders, count: ordersCount } = await ordersQ;
 
@@ -28,7 +30,8 @@ router.get('/overview', requirePermission('stats.view'), async (req, res) => {
   // Installments aggregate (collections + outstanding)
   let instQ = supabaseAdmin
     .from('installments')
-    .select('amount_due, amount_paid, status, due_date, payment_date, orders!inner(branch_id)');
+    .select('amount_due, amount_paid, status, due_date, payment_date, orders!inner(branch_id, company_id)');
+  if (companyFilter) instQ = instQ.eq('orders.company_id', companyFilter);
   if (branchFilter) instQ = instQ.eq('orders.branch_id', branchFilter);
   const { data: insts } = await instQ;
 
@@ -49,16 +52,20 @@ router.get('/overview', requirePermission('stats.view'), async (req, res) => {
 
   // Customers count
   let custQ = supabaseAdmin.from('customers').select('id', { count: 'exact', head: true });
+  if (companyFilter) custQ = custQ.eq('company_id', companyFilter);
   if (branchFilter) custQ = custQ.eq('branch_id', branchFilter);
   const { count: customersCount } = await custQ;
 
   // Inventory count
   let invQ = supabaseAdmin.from('inventory').select('id', { count: 'exact', head: true }).eq('status', 'in_stock');
+  if (companyFilter) invQ = invQ.eq('company_id', companyFilter);
   if (branchFilter) invQ = invQ.eq('branch_id', branchFilter);
   const { count: stockCount } = await invQ;
 
   // Branches count
-  const { count: branchCount } = await supabaseAdmin.from('branches').select('id', { count: 'exact', head: true }).eq('is_active', true);
+  let brQ = supabaseAdmin.from('branches').select('id', { count: 'exact', head: true }).eq('is_active', true);
+  if (companyFilter) brQ = brQ.eq('company_id', companyFilter);
+  const { count: branchCount } = await brQ;
 
   res.json({
     orders: {
@@ -85,14 +92,16 @@ router.get('/overview', requirePermission('stats.view'), async (req, res) => {
 // GET /stats/monthly-collections - last 12 months
 router.get('/monthly-collections', requirePermission('stats.view'), async (req, res) => {
   const scope = scopeBranch(req);
+  const companyFilter = scopeCompany(req);
   const branchFilter = req.query.branch_id && req.user.role === 'admin' ? req.query.branch_id : scope;
 
   const start = dayjs().subtract(11, 'month').startOf('month').format('YYYY-MM-DD');
   let q = supabaseAdmin
     .from('installments')
-    .select('amount_paid, payment_date, orders!inner(branch_id)')
+    .select('amount_paid, payment_date, orders!inner(branch_id, company_id)')
     .not('payment_date', 'is', null)
     .gte('payment_date', start);
+  if (companyFilter) q = q.eq('orders.company_id', companyFilter);
   if (branchFilter) q = q.eq('orders.branch_id', branchFilter);
 
   const { data, error } = await q;
@@ -112,8 +121,11 @@ router.get('/monthly-collections', requirePermission('stats.view'), async (req, 
 });
 
 // GET /stats/orders-by-branch - admin only
-router.get('/orders-by-branch', requirePermission('stats.global_view'), async (_req, res) => {
-  const { data: branches } = await supabaseAdmin.from('branches').select('id, name').eq('is_active', true);
+router.get('/orders-by-branch', requirePermission('stats.global_view'), async (req, res) => {
+  const companyFilter = scopeCompany(req);
+  let brQ = supabaseAdmin.from('branches').select('id, name').eq('is_active', true);
+  if (companyFilter) brQ = brQ.eq('company_id', companyFilter);
+  const { data: branches } = await brQ;
   const out = [];
   for (const b of (branches || [])) {
     const { count } = await supabaseAdmin
@@ -126,9 +138,11 @@ router.get('/orders-by-branch', requirePermission('stats.global_view'), async (_
 // GET /stats/top-products
 router.get('/top-products', requirePermission('stats.view'), async (req, res) => {
   const scope = scopeBranch(req);
+  const companyFilter = scopeCompany(req);
   const branchFilter = req.query.branch_id && req.user.role === 'admin' ? req.query.branch_id : scope;
 
   let q = supabaseAdmin.from('orders').select('product_id, products(name), total_price');
+  if (companyFilter) q = q.eq('company_id', companyFilter);
   if (branchFilter) q = q.eq('branch_id', branchFilter);
   const { data } = await q;
 

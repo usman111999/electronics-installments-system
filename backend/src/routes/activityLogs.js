@@ -1,6 +1,6 @@
 const express = require('express');
 const { supabaseAdmin } = require('../config/supabase');
-const { authenticate, requirePermission, scopeBranch } = require('../middleware/auth');
+const { authenticate, requirePermission, scopeBranch, scopeCompany } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authenticate);
@@ -12,7 +12,10 @@ router.get('/', requirePermission('activity_logs.view'), async (req, res) => {
     .order('created_at', { ascending: false })
     .limit(Math.min(Number(req.query.limit) || 200, 1000));
 
-  // Admins see everything; operators see only their branch activity
+  // super_admin sees all; Company Owners see only their company's activity;
+  // operators see only their branch activity.
+  const cScope = scopeCompany(req);
+  if (cScope) q = q.eq('company_id', cScope);
   const scope = scopeBranch(req);
   if (scope) q = q.eq('branch_id', scope);
   if (req.query.branch_id && req.user.role === 'admin') q = q.eq('branch_id', req.query.branch_id);
