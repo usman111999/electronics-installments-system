@@ -2,6 +2,7 @@ const express = require('express');
 const { supabaseAdmin } = require('../config/supabase');
 const { authenticate, requirePermission, invalidateAll, scopeCompany } = require('../middleware/auth');
 const { logActivity } = require('../services/activityLog');
+const { DEFAULT_BUNDLES } = require('../services/permissions');
 
 const router = express.Router();
 router.use(authenticate);
@@ -12,6 +13,25 @@ function callerCanGrant(req, perms) {
   if (granted.includes('*')) return { ok: true };
   const missing = (perms || []).filter(p => !granted.includes(p));
   return missing.length === 0 ? { ok: true } : { ok: false, missing };
+}
+
+// A role_id attached to a user must belong to the caller's company AND must not
+// grant permissions the caller lacks. Without this, role_id is a cross-tenant
+// mis-tag and a privilege-escalation vector (a role's permissions are resolved
+// straight from role_permissions, bypassing the inline callerCanGrant check).
+async function validateRoleId(req, roleId) {
+  const { data: role } = await supabaseAdmin
+    .from('roles').select('company_id').eq('id', roleId).single();
+  if (!role) return { ok: false, status: 400, error: 'Role not found' };
+  const cScope = scopeCompany(req);
+  if (cScope && role.company_id !== cScope) {
+    return { ok: false, status: 403, error: 'Role belongs to another company' };
+  }
+  const { data: rps } = await supabaseAdmin
+    .from('role_permissions').select('permission_id').eq('role_id', roleId);
+  const chk = callerCanGrant(req, (rps || []).map(r => r.permission_id));
+  if (!chk.ok) return { ok: false, status: 403, error: 'Cannot assign a role that grants permissions you do not have', missing: chk.missing };
+  return { ok: true };
 }
 
 router.get('/', requirePermission('users.view'), async (req, res) => {
@@ -84,20 +104,28 @@ router.post('/', requirePermission('users.create'), async (req, res) => {
     return res.status(400).json({ error: 'branch_id is required for operators and customers' });
   }
 
-  // Resolve the tenant for the new login. Non-super callers are pinned to their
-  // own company; a super_admin derives it from the chosen branch, or takes an
-  // explicit company_id (e.g. when creating a company-level admin).
-  let company_id = req.user.company_id || null;
-  if (!company_id && finalBranchId) {
-    const { data: br } = await supabaseAdmin.from('branches').select('company_id').eq('id', finalBranchId).single();
-    company_id = br?.company_id || null;
-  }
-  if (!company_id && req.body.company_id) company_id = req.body.company_id;
-  // A branch must belong to the resolved company.
-  if (company_id && finalBranchId) {
-    const { data: br } = await supabaseAdmin.from('branches').select('company_id').eq('id', finalBranchId).single();
-    if (br && br.company_id !== company_id) {
-      return res.status(403).json({ error: 'Branch belongs to another company' });
+  // Resolve the tenant for the new login. A super_admin derives it from the
+  // chosen branch or an explicit company_id. Every non-super caller is STRICTLY
+  // pinned to their own company — a company-less caller may not create logins
+  // (fail-closed on role, never on the truthiness of company_id, so a
+  // company-less admin can't mint users into another tenant).
+  const isSuper = req.user.role === 'super_admin';
+  let company_id;
+  if (isSuper) {
+    company_id = null;
+    if (finalBranchId) {
+      const { data: br } = await supabaseAdmin.from('branches').select('company_id').eq('id', finalBranchId).single();
+      company_id = br?.company_id || null;
+    }
+    if (!company_id && req.body.company_id) company_id = req.body.company_id;
+  } else {
+    company_id = req.user.company_id;
+    if (!company_id) return res.status(403).json({ error: 'Your account has no company assigned' });
+    if (finalBranchId) {
+      const { data: br } = await supabaseAdmin.from('branches').select('company_id').eq('id', finalBranchId).single();
+      if (br && br.company_id !== company_id) {
+        return res.status(403).json({ error: 'Branch belongs to another company' });
+      }
     }
   }
 
@@ -105,6 +133,11 @@ router.post('/', requirePermission('users.create'), async (req, res) => {
   if (Array.isArray(permissions)) {
     const check = callerCanGrant(req, permissions);
     if (!check.ok) return res.status(403).json({ error: 'Cannot grant permissions you do not have', missing: check.missing });
+  }
+  // A custom role assignment must stay inside the caller's company and grantable.
+  if (role_id) {
+    const rc = await validateRoleId(req, role_id);
+    if (!rc.ok) return res.status(rc.status).json({ error: rc.error, missing: rc.missing });
   }
 
   const { data: auth, error: authErr } = await supabaseAdmin.auth.admin.createUser({
@@ -151,9 +184,10 @@ router.patch('/:id', requirePermission('users.update'), async (req, res) => {
 
   // Only a super_admin may modify a super_admin account, and operators may only
   // edit customers in their own branch. One target lookup covers both checks.
+  let target = null;
   if (req.user.role !== 'super_admin') {
-    const { data: target } = await supabaseAdmin
-      .from('profiles').select('role, branch_id, company_id').eq('id', id).single();
+    ({ data: target } = await supabaseAdmin
+      .from('profiles').select('role, role_id, branch_id, company_id').eq('id', id).single());
     if (target?.role === 'super_admin') {
       return res.status(403).json({ error: 'Forbidden' });
     }
@@ -170,6 +204,38 @@ router.patch('/:id', requirePermission('users.update'), async (req, res) => {
   if (Array.isArray(permissions)) {
     const check = callerCanGrant(req, permissions);
     if (!check.ok) return res.status(403).json({ error: 'Cannot grant permissions you do not have', missing: check.missing });
+    // A non-super_admin may not edit their OWN permissions, and the target's
+    // RESULTING effective set (base bundle + grants, once the old overrides are
+    // wiped) must stay within the caller's own permissions. Without this, wiping
+    // super_admin's deny-overrides would silently re-grant the full base bundle,
+    // defeating an intentional restriction and re-granting perms the caller lacks.
+    if (req.user.role !== 'super_admin') {
+      if (id === req.user.id) return res.status(403).json({ error: 'You cannot change your own permissions' });
+      const callerPerms = req.user.permissions || [];
+      if (!callerPerms.includes('*')) {
+        let base = [];
+        if (target?.role_id) {
+          const { data: rps } = await supabaseAdmin.from('role_permissions').select('permission_id').eq('role_id', target.role_id);
+          base = (rps || []).map(r => r.permission_id);
+        } else {
+          base = DEFAULT_BUNDLES[target?.role] || [];
+        }
+        const resulting = new Set([...base, ...permissions]);
+        const exceeds = [...resulting].filter(p => !callerPerms.includes(p));
+        if (exceeds.length) return res.status(403).json({ error: 'This change would grant permissions you do not hold', missing: exceeds });
+      }
+    }
+  }
+  // A custom role assignment must stay inside the caller's company and grantable.
+  if (role_id) {
+    const rc = await validateRoleId(req, role_id);
+    if (!rc.ok) return res.status(rc.status).json({ error: rc.error, missing: rc.missing });
+  }
+  // Guard the role VALUE, not just the caller: a non-super_admin must never be
+  // able to promote anyone (including themselves) to admin or super_admin — that
+  // would mint a peer/owner or break out of the company entirely.
+  if (role !== undefined && req.user.role !== 'super_admin' && !['operator', 'customer'].includes(role)) {
+    return res.status(403).json({ error: 'You cannot assign that role' });
   }
 
   // Update Auth first — if it fails we don't want a DB row that's out of sync
@@ -182,7 +248,14 @@ router.patch('/:id', requirePermission('users.update'), async (req, res) => {
   if (full_name !== undefined) updates.full_name = full_name;
   if (phone !== undefined) updates.phone = phone;
   if (is_active !== undefined) updates.is_active = is_active;
-  if (branch_id !== undefined && (req.user.role === 'admin' || req.user.role === 'super_admin')) updates.branch_id = branch_id;
+  if (branch_id !== undefined && (req.user.role === 'admin' || req.user.role === 'super_admin')) {
+    // A reassigned branch must belong to the caller's own company.
+    if (branch_id && req.user.role !== 'super_admin') {
+      const { data: br } = await supabaseAdmin.from('branches').select('company_id').eq('id', branch_id).single();
+      if (!br || br.company_id !== scopeCompany(req)) return res.status(403).json({ error: 'Branch belongs to another company' });
+    }
+    updates.branch_id = branch_id;
+  }
   if (role !== undefined && (req.user.role === 'admin' || req.user.role === 'super_admin')) updates.role = role;
   if (role_id !== undefined) updates.role_id = role_id;
   if (password) updates.password_plain = password;

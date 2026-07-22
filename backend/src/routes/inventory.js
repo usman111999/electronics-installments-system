@@ -38,8 +38,11 @@ router.post('/', requirePermission('inventory.manage'), async (req, res) => {
   const { data: brRow } = await supabaseAdmin.from('branches').select('company_id').eq('id', branch_id).single();
   if (!brRow) return res.status(400).json({ error: 'Branch not found' });
   const company_id = brRow.company_id;
-  if (req.user.company_id && req.user.company_id !== company_id) {
-    return res.status(403).json({ error: 'Branch belongs to another company' });
+  // Non-super callers are strictly pinned to their own company; a caller with no
+  // company assigned may not create data (fail-closed).
+  if (req.user.role !== 'super_admin') {
+    if (!req.user.company_id) return res.status(403).json({ error: 'Your account has no company assigned' });
+    if (req.user.company_id !== company_id) return res.status(403).json({ error: 'Branch belongs to another company' });
   }
   const { data: prodCo } = await supabaseAdmin.from('products').select('company_id').eq('id', body.product_id).single();
   if (prodCo && prodCo.company_id && prodCo.company_id !== company_id) {
@@ -79,6 +82,15 @@ router.patch('/:id', requirePermission('inventory.manage'), async (req, res) => 
     if (cScope && existing.company_id !== cScope) return res.status(403).json({ error: 'Forbidden' });
     if (scope && existing.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
     delete updates.branch_id;
+  }
+
+  // A reassigned product must belong to the same company as the stock item.
+  if (updates.product_id) {
+    const { data: item } = await supabaseAdmin.from('inventory').select('company_id').eq('id', req.params.id).single();
+    const { data: prod } = await supabaseAdmin.from('products').select('company_id').eq('id', updates.product_id).single();
+    if (!item || !prod || prod.company_id !== item.company_id) {
+      return res.status(400).json({ error: 'Product belongs to a different company' });
+    }
   }
 
   const { data, error } = await supabaseAdmin

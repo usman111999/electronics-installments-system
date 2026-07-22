@@ -7,12 +7,15 @@ const router = express.Router();
 router.use(authenticate);
 
 // Sequential, zero-padded account numbers (no random): 0001, 0002, 0003 …
-// Next = highest existing sequential account_no + 1. Legacy 6-digit random
-// numbers (>= 100000) are ignored so the clean sequence never collides with
-// them. The unique constraint on account_no plus a one-shot retry guards the
-// rare race.
-async function nextAccountNo() {
-  const { data } = await supabaseAdmin.from('customers').select('account_no');
+// Scoped PER COMPANY so each tenant has its own independent sequence (and so the
+// sequence never leaks other companies' creation activity). Next = highest
+// existing sequential account_no in this company + 1. Legacy 6-digit random
+// numbers (>= 100000) are ignored. The (company_id, account_no) unique
+// constraint plus a one-shot retry guards the rare race.
+async function nextAccountNo(companyId) {
+  let q = supabaseAdmin.from('customers').select('account_no');
+  if (companyId) q = q.eq('company_id', companyId);
+  const { data } = await q;
   let max = 0;
   for (const r of data || []) {
     const n = parseInt(r.account_no, 10);
@@ -85,15 +88,21 @@ router.post('/', requirePermission('customers.manage'), async (req, res) => {
   if (!body.customer_name) return res.status(400).json({ error: 'customer_name required' });
   if (!body.phone_1) return res.status(400).json({ error: 'phone_1 required' });
 
-  // A customer's company follows its branch. Non-super users are pinned to their
-  // own company; a super_admin inherits whichever company the branch belongs to.
-  let company_id = req.user.company_id || null;
+  // A customer's company follows its branch. A super_admin inherits whichever
+  // company the branch belongs to; every non-super caller is STRICTLY pinned to
+  // their own company — and a caller with no company assigned may not create
+  // data (fail-closed, so a company-less admin can't write into another tenant).
+  const isSuper = req.user.role === 'super_admin';
   const { data: brRow } = await supabaseAdmin.from('branches').select('company_id').eq('id', branch_id).single();
   if (!brRow) return res.status(400).json({ error: 'Branch not found' });
-  if (company_id && brRow.company_id !== company_id) {
-    return res.status(403).json({ error: 'Branch belongs to another company' });
+  let company_id;
+  if (isSuper) {
+    company_id = brRow.company_id;
+  } else {
+    company_id = req.user.company_id;
+    if (!company_id) return res.status(403).json({ error: 'Your account has no company assigned' });
+    if (brRow.company_id !== company_id) return res.status(403).json({ error: 'Branch belongs to another company' });
   }
-  company_id = company_id || brRow.company_id;
   if (!company_id) return res.status(400).json({ error: 'Could not resolve company for this branch' });
 
   // Optionally create a login for the customer
@@ -128,7 +137,7 @@ router.post('/', requirePermission('customers.manage'), async (req, res) => {
     profile_id,
     branch_id,
     company_id,
-    account_no: body.account_no || await nextAccountNo(),
+    account_no: body.account_no || await nextAccountNo(company_id),
     customer_name: body.customer_name,
     father_husband_name: body.father_husband_name,
     cnic: body.cnic,
@@ -152,7 +161,7 @@ router.post('/', requirePermission('customers.manage'), async (req, res) => {
   // If a concurrent create grabbed the same sequential account_no, recompute and
   // retry once (only when we generated the number, not when the caller set it).
   if (custErr && /account_no/.test(custErr.message || '') && !body.account_no) {
-    customerInsert.account_no = await nextAccountNo();
+    customerInsert.account_no = await nextAccountNo(company_id);
     ({ data: customer, error: custErr } = await supabaseAdmin
       .from('customers').insert(customerInsert).select().single());
   }

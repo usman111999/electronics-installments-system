@@ -33,7 +33,11 @@ Thank you.`
 
 // Sends WhatsApp reminders for any unpaid installment whose due_date is in the
 // current month and today is day 1–5 of the month. Runs every day at 09:30.
-async function runReminderJob() {
+// companyId / branchId scope the run. The nightly cron passes neither (global
+// system run); a user-triggered run passes the caller's scope so a Company
+// Owner / operator only ever reminds — and reads the phone/name of — their own
+// company's customers, never another tenant's.
+async function runReminderJob({ companyId = null, branchId = null } = {}) {
   const today = dayjs();
   const dom = today.date();
   if (dom > 5) {
@@ -44,12 +48,15 @@ async function runReminderJob() {
   const monthStart = today.startOf('month').format('YYYY-MM-DD');
   const monthEnd = today.endOf('month').format('YYYY-MM-DD');
 
-  const { data: insts, error } = await supabaseAdmin
+  let q = supabaseAdmin
     .from('installments')
-    .select('id, installment_no, due_date, amount_due, amount_paid, status, order_id, orders(customer_id, customers(id, customer_name, account_no, phone_1))')
+    .select('id, installment_no, due_date, amount_due, amount_paid, status, order_id, orders!inner(company_id, branch_id, customer_id, customers(id, customer_name, account_no, phone_1))')
     .gte('due_date', monthStart)
     .lte('due_date', monthEnd)
     .in('status', ['pending', 'partial', 'overdue']);
+  if (companyId) q = q.eq('orders.company_id', companyId);
+  if (branchId) q = q.eq('orders.branch_id', branchId);
+  const { data: insts, error } = await q;
 
   if (error) {
     console.error('[scheduler] fetch error', error.message);

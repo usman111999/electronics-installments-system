@@ -60,7 +60,7 @@ router.get('/:id/detail', requirePermission('branches.view'), async (req, res) =
     supabaseAdmin.from('inventory').select('id', { count: 'exact', head: true }).eq('branch_id', id),
     supabaseAdmin.from('profiles')
       .select('id, full_name, email, phone, role, is_active, created_at')
-      .eq('branch_id', id).order('role', { ascending: true }),
+      .eq('branch_id', id).eq('company_id', branch.company_id).order('role', { ascending: true }),
     supabaseAdmin.from('customers')
       .select('id, customer_name, account_no, phone_1, picture_url, created_at, orders(count)')
       .eq('branch_id', id).order('created_at', { ascending: false }).limit(100),

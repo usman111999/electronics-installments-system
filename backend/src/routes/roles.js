@@ -89,7 +89,19 @@ router.post('/', requirePermission('roles.manage'), async (req, res) => {
   const check = callerCanGrant(req, perms);
   if (!check.ok) return res.status(403).json({ error: 'Cannot grant permissions you do not have', missing: check.missing });
 
-  const company_id = req.user.role === 'super_admin' ? (req.body.company_id || null) : req.user.company_id;
+  const isSuper = req.user.role === 'super_admin';
+  const company_id = isSuper ? (req.body.company_id || null) : req.user.company_id;
+  // Fail-closed: a non-super caller with no company assigned may not create roles
+  // (mirrors the hardened customers/orders/inventory/users insert paths).
+  if (!isSuper && !company_id) return res.status(403).json({ error: 'Your account has no company assigned' });
+
+  // A branch-scoped role must reference a branch inside its OWN company.
+  if (branch_id) {
+    const { data: br } = await supabaseAdmin.from('branches').select('company_id').eq('id', branch_id).single();
+    if (!br || (company_id && br.company_id !== company_id)) {
+      return res.status(400).json({ error: 'Branch belongs to another company' });
+    }
+  }
 
   const { data: role, error } = await supabaseAdmin
     .from('roles').insert({
@@ -130,6 +142,13 @@ router.patch('/:id', requirePermission('roles.manage'), async (req, res) => {
   if (Array.isArray(permissions)) {
     const check = callerCanGrant(req, permissions);
     if (!check.ok) return res.status(403).json({ error: 'Cannot grant permissions you do not have', missing: check.missing });
+  }
+  // A reassigned branch must belong to the role's own company.
+  if (branch_id) {
+    const { data: br } = await supabaseAdmin.from('branches').select('company_id').eq('id', branch_id).single();
+    if (!br || br.company_id !== existing.company_id) {
+      return res.status(400).json({ error: 'Branch belongs to another company' });
+    }
   }
 
   const updates = {};

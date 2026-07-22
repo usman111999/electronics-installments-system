@@ -471,13 +471,20 @@ router.post('/:imei/locate', authenticate, requirePermission('devices.locate'), 
 // installment on the order older than that many days AND the order isn't
 // already locked AND the order has an enrolled device.
 // ---------------------------------------------------------------------------
-async function runAutoLockSweep({ dryRun = false, issued_by = null } = {}) {
+// companyId / branchId scope the sweep. The nightly cron passes neither (a
+// global system run); a user-triggered run passes the caller's scope so a
+// Company Owner / operator can only ever lock devices inside their own tenant —
+// never another company's customers' phones.
+async function runAutoLockSweep({ dryRun = false, issued_by = null, companyId = null, branchId = null } = {}) {
   const today = dayjs();
 
-  const { data: branches, error: brErr } = await supabaseAdmin
+  let brQ = supabaseAdmin
     .from('branches')
     .select('id, name, auto_lock_days')
     .not('auto_lock_days', 'is', null);
+  if (companyId) brQ = brQ.eq('company_id', companyId);
+  if (branchId) brQ = brQ.eq('id', branchId);
+  const { data: branches, error: brErr } = await brQ;
   if (brErr) throw new Error(brErr.message);
 
   const result = { branches_checked: 0, candidates: 0, locked: 0, skipped: 0, errors: [] };
@@ -538,9 +545,12 @@ async function runAutoLockSweep({ dryRun = false, issued_by = null } = {}) {
 
 router.post('/run-auto-lock', authenticate, requirePermission('devices.lock'), async (req, res) => {
   try {
+    // Scope the manual sweep to the caller's tenant (null for super_admin = all).
     const summary = await runAutoLockSweep({
       dryRun: req.query.dry === '1',
       issued_by: req.user.id,
+      companyId: scopeCompany(req),
+      branchId: scopeBranch(req),
     });
     res.json(summary);
   } catch (e) {

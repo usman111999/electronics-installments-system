@@ -6,18 +6,21 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [branch, setBranch] = useState(null);
+  const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    if (!getAccessToken()) { setUser(null); setBranch(null); setLoading(false); return; }
+    if (!getAccessToken()) { setUser(null); setBranch(null); setCompany(null); setLoading(false); return; }
     try {
       const { data } = await api.get('/auth/me');
       setUser(data.user);
       setBranch(data.branch);
+      setCompany(data.company || null);
     } catch {
       setAccessToken(null);
       setUser(null);
       setBranch(null);
+      setCompany(null);
     } finally {
       setLoading(false);
     }
@@ -38,6 +41,7 @@ export function AuthProvider({ children }) {
     setAccessToken(null);
     setUser(null);
     setBranch(null);
+    setCompany(null);
   };
 
   const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
@@ -55,7 +59,7 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ user, branch, loading, login, logout, refresh, permissions, hasPermission }}>
+    <AuthContext.Provider value={{ user, branch, company, loading, login, logout, refresh, permissions, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

@@ -107,13 +107,31 @@ router.post('/', requirePermission('orders.create'), async (req, res) => {
   const { data: brRow } = await supabaseAdmin.from('branches').select('company_id').eq('id', branch_id).single();
   if (!brRow) return res.status(400).json({ error: 'Branch not found' });
   const company_id = brRow.company_id;
-  if (req.user.company_id && req.user.company_id !== company_id) {
-    return res.status(403).json({ error: 'Branch belongs to another company' });
+  // Non-super callers are strictly pinned to their own company; a caller with no
+  // company assigned may not create data (fail-closed).
+  if (req.user.role !== 'super_admin') {
+    if (!req.user.company_id) return res.status(403).json({ error: 'Your account has no company assigned' });
+    if (req.user.company_id !== company_id) return res.status(403).json({ error: 'Branch belongs to another company' });
   }
   const { data: custCo } = await supabaseAdmin.from('customers').select('company_id').eq('id', b.customer_id).single();
   if (!custCo) return res.status(400).json({ error: 'Customer not found' });
   if (custCo.company_id !== company_id) {
     return res.status(400).json({ error: 'Customer belongs to a different company' });
+  }
+  // A product / inventory item referenced on the order must belong to the SAME
+  // company. Validate BEFORE reserving inventory so a cross-company id can never
+  // flip another tenant's stock to sold or leak its serial/product back.
+  if (b.product_id) {
+    const { data: prodCo } = await supabaseAdmin.from('products').select('company_id').eq('id', b.product_id).single();
+    if (!prodCo || prodCo.company_id !== company_id) {
+      return res.status(400).json({ error: 'Product belongs to a different company' });
+    }
+  }
+  if (b.inventory_id) {
+    const { data: invCo } = await supabaseAdmin.from('inventory').select('company_id').eq('id', b.inventory_id).single();
+    if (!invCo || invCo.company_id !== company_id) {
+      return res.status(400).json({ error: 'Inventory item belongs to a different company' });
+    }
   }
 
   // If an inventory item was chosen, reserve it now to avoid double-sell.
@@ -126,6 +144,7 @@ router.post('/', requirePermission('orders.create'), async (req, res) => {
       .update({ status: 'sold' })
       .eq('id', b.inventory_id)
       .eq('status', 'in_stock')
+      .eq('company_id', company_id)
       .select()
       .maybeSingle();
     if (invErr) return res.status(400).json({ error: 'Inventory update failed: ' + invErr.message });
@@ -135,12 +154,12 @@ router.post('/', requirePermission('orders.create'), async (req, res) => {
   let productSnap = { name: null, model: null, serial: null };
   if (b.product_id) {
     const { data: p } = await supabaseAdmin
-      .from('products').select('name, model').eq('id', b.product_id).single();
+      .from('products').select('name, model').eq('id', b.product_id).eq('company_id', company_id).single();
     if (p) { productSnap.name = p.name; productSnap.model = p.model; }
   }
   if (b.inventory_id) {
     const { data: inv } = await supabaseAdmin
-      .from('inventory').select('serial_no').eq('id', b.inventory_id).single();
+      .from('inventory').select('serial_no').eq('id', b.inventory_id).eq('company_id', company_id).single();
     if (inv) productSnap.serial = inv.serial_no;
   }
   // Allow free-text overrides so any electronics item can be financed even when
@@ -235,6 +254,19 @@ router.patch('/:id', requirePermission('orders.update'), async (req, res) => {
     if (!existing) return res.status(403).json({ error: 'Forbidden' });
     if (cScope && existing.company_id !== cScope) return res.status(403).json({ error: 'Forbidden' });
     if (scope && existing.branch_id !== scope) return res.status(403).json({ error: 'Forbidden' });
+  }
+  // A re-pointed product / inventory item must stay within the order's company.
+  if (updates.product_id || updates.inventory_id) {
+    const { data: ord } = await supabaseAdmin.from('orders').select('company_id').eq('id', req.params.id).single();
+    if (!ord) return res.status(404).json({ error: 'Order not found' });
+    if (updates.product_id) {
+      const { data: prodCo } = await supabaseAdmin.from('products').select('company_id').eq('id', updates.product_id).single();
+      if (!prodCo || prodCo.company_id !== ord.company_id) return res.status(400).json({ error: 'Product belongs to a different company' });
+    }
+    if (updates.inventory_id) {
+      const { data: invCo } = await supabaseAdmin.from('inventory').select('company_id').eq('id', updates.inventory_id).single();
+      if (!invCo || invCo.company_id !== ord.company_id) return res.status(400).json({ error: 'Inventory item belongs to a different company' });
+    }
   }
   const { data, error } = await supabaseAdmin
     .from('orders').update(updates).eq('id', req.params.id).select().single();

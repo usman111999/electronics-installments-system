@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import { api } from '../../api/client';
 import PageHeader from '../../components/PageHeader';
 import Modal from '../../components/Modal';
+import ImageUpload from '../../components/ImageUpload';
 
 // Show/copy a plaintext password inline (super-admin convenience — same pattern
 // as the Admins screen so the owner can be told their login).
@@ -18,7 +19,7 @@ function Secret({ value }) {
 }
 
 const EMPTY = {
-  name: '', code: '', phone: '', address: '',
+  name: '', code: '', logo_url: '', phone: '', address: '',
   owner_name: '', owner_email: '', owner_password: '',
 };
 
@@ -55,6 +56,7 @@ export default function Companies() {
       const { data } = await api.post('/companies', {
         name: form.name.trim(),
         code: form.code.trim() || null,
+        logo_url: form.logo_url || null,
         phone: form.phone.trim() || null,
         address: form.address.trim() || null,
         owner_name: form.owner_name.trim() || null,
@@ -113,7 +115,14 @@ export default function Companies() {
             {loading && <tr><td colSpan="8" className="text-center text-slate-400 py-8">Loading…</td></tr>}
             {!loading && list.map(c => (
               <tr key={c.id}>
-                <td className="font-medium">{c.name}</td>
+                <td className="font-medium">
+                  <div className="flex items-center gap-2">
+                    {c.logo_url
+                      ? <img src={c.logo_url} alt="" className="w-8 h-8 rounded object-contain bg-black/5" />
+                      : <div className="w-8 h-8 rounded bg-slate-200 flex items-center justify-center text-slate-500 text-xs">{c.name?.[0]}</div>}
+                    <span>{c.name}</span>
+                  </div>
+                </td>
                 <td className="text-slate-500">{c.code || '—'}</td>
                 <td>{c.stats?.branches ?? 0}</td>
                 <td>{c.stats?.staff ?? 0}</td>
@@ -158,6 +167,7 @@ export default function Companies() {
         ) : (
           <form onSubmit={submit} className="space-y-4">
             {err && <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">{err}</div>}
+            <ImageUpload value={form.logo_url} onChange={(url) => setForm(f => ({ ...f, logo_url: url }))} bucket="branding" label="Company Logo" />
             <div className="grid grid-cols-2 gap-3">
               <div><label className="label">Company Name *</label>
                 <input className="input" required placeholder="e.g. Bilal Mobiles" value={form.name}

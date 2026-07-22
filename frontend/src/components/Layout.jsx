@@ -115,9 +115,13 @@ const CUSTOMER_NAV = [
 ];
 
 export default function Layout() {
-  const { user, branch, logout, hasPermission } = useAuth();
+  const { user, branch, company, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  // Each company sees its OWN name + logo; super_admin (no company) and any
+  // company without a logo fall back to the global Ansaf branding.
+  const brandName = company?.name || COMPANY_NAME;
+  const brandLogo = company?.logo_url || LOGO_URL;
   // Mobile slide-in sidebar state. Closed by default on small screens; the
   // hamburger button toggles it. We auto-close on route change so navigation
   // doesn't leave the drawer open obscuring the new page.
@@ -166,7 +170,7 @@ export default function Layout() {
         <div className="px-4 py-4 border-b border-slate-800 flex items-center justify-between">
           <Link to="/" className="block min-w-0 flex-1">
             <div className="h-12 w-full overflow-hidden rounded-lg bg-black flex items-center justify-center">
-              <img src={LOGO_URL} alt={COMPANY_NAME} className="h-full w-auto object-contain" />
+              <img src={brandLogo} alt={brandName} className="h-full w-auto object-contain" />
             </div>
             <div className="text-[11px] text-slate-400 capitalize truncate mt-1.5 text-center">{user?.role?.replace('_', ' ')} portal</div>
           </Link>
@@ -237,9 +241,9 @@ export default function Layout() {
           </button>
           <div className="ml-3 flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-md bg-black overflow-hidden flex items-center justify-center shrink-0">
-              <img src={LOGO_URL} alt={COMPANY_NAME} className="h-full w-auto object-contain" />
+              <img src={brandLogo} alt={brandName} className="h-full w-auto object-contain" />
             </div>
-            <div className="font-semibold text-slate-900 truncate">{COMPANY_NAME}</div>
+            <div className="font-semibold text-slate-900 truncate">{brandName}</div>
           </div>
         </div>
         <Outlet />

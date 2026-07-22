@@ -16,7 +16,7 @@ const upload = multer({
   },
 });
 
-const ALLOWED_BUCKETS = ['customer-pictures', 'product-images'];
+const ALLOWED_BUCKETS = ['customer-pictures', 'product-images', 'branding'];
 
 router.post('/:bucket', requireRole('super_admin', 'admin', 'operator'), upload.single('file'), async (req, res) => {
   const { bucket } = req.params;
@@ -29,6 +29,11 @@ router.post('/:bucket', requireRole('super_admin', 'admin', 'operator'), upload.
   // Only admins can upload product images.
   if (req.user.role === 'operator' && bucket === 'product-images') {
     return res.status(403).json({ error: 'Only admins can upload product images' });
+  }
+  // Company logos are branding — only a super_admin (creating/editing companies)
+  // or a Company Owner (their own logo) may upload them.
+  if (bucket === 'branding' && req.user.role === 'operator') {
+    return res.status(403).json({ error: 'Only admins can upload company logos' });
   }
 
   const ext = (path.extname(req.file.originalname) || '').toLowerCase() || '.jpg';
