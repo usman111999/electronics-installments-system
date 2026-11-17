@@ -84,7 +84,7 @@ export default function OutstandingReportPrint({ rows, month, branchLabel, categ
               <th>Last Paid</th>
               <th>Category</th>
               <th className="num">Total Amount</th>
-              <th className="num">Inst.</th>
+              <th className="num">Pending Inst.</th>
               <th className="num">Balance</th>
               <th className="num">Monthly</th>
               <th className="num">Outstanding</th>
@@ -107,7 +107,7 @@ export default function OutstandingReportPrint({ rows, month, branchLabel, categ
                     <td style={{ whiteSpace: 'nowrap' }}>{d(r.last_paid_date)}</td>
                     <td>{r.category || <span className="muted">—</span>}</td>
                     <td className="num">{num(r.financed)}</td>
-                    <td className="num">{r.planned}</td>
+                    <td className="num">{r.unpaid_count}</td>
                     <td className="num">{num(r.remaining)}</td>
                     <td className="num">{num(r.monthly)}</td>
                     <td className="num font-semibold">{num(r.due_now)}</td>
