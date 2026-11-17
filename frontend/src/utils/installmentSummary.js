@@ -99,3 +99,16 @@ export function summarizeOrders(installments, today = dayjs()) {
 // Money as plain grouped digits ("222,575"), matching the printed report.
 export const num = (n) => Math.round(Number(n || 0)).toLocaleString('en-US');
 export const rs = (n) => `Rs. ${num(n)}`;
+
+// How long an unpaid installment is past its due date, in plain months and
+// days ("3 months 12 days", "1 month", "5 days"). Empty when it isn't late.
+export function lateBy(dueDate, today = dayjs()) {
+  if (!dueDate) return '';
+  const due = dayjs(dueDate).startOf('day');
+  const now = today.startOf('day');
+  if (!now.isAfter(due)) return '';
+  const months = now.diff(due, 'month');
+  const days = now.diff(due.add(months, 'month'), 'day');
+  const part = (n, word) => (n > 0 ? `${n} ${word}${n === 1 ? '' : 's'}` : '');
+  return [part(months, 'month'), part(days, 'day')].filter(Boolean).join(' ');
+}

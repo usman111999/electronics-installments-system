@@ -8,7 +8,7 @@ import PageHeader from '../components/PageHeader';
 import StatCard from '../components/StatCard';
 import Avatar from '../components/Avatar';
 import OutstandingReportPrint from '../components/OutstandingReportPrint';
-import { summarizeOrders, rs } from '../utils/installmentSummary';
+import { summarizeOrders, rs, lateBy } from '../utils/installmentSummary';
 
 
 // "Due this month" is the default: from the 1st of every month it lists every
@@ -229,6 +229,7 @@ export default function Installments() {
             {loading && <tr><td colSpan="11" className="text-center text-slate-400 py-8">Loading…</td></tr>}
             {!loading && filtered.map(r => {
               const [label, pill] = statusLabel(r);
+              const late = r.is_due ? lateBy(r.next_due_date) : '';
               return (
                 <tr key={r.order_id} className="cursor-pointer"
                   onClick={() => navigate(`/orders/${r.order_id}`)}>
@@ -256,7 +257,10 @@ export default function Installments() {
                     {r.due_now > 0 ? rs(r.due_now) : '—'}
                   </td>
                   <td className="text-sm whitespace-nowrap">{fmtDate(r.last_paid_date)}</td>
-                  <td><span className={pill}>{label}</span></td>
+                  <td>
+                    <span className={pill}>{label}</span>
+                    {late && <div className="text-xs text-red-600 mt-1 whitespace-nowrap">{late} late</div>}
+                  </td>
                   <td onClick={e => e.stopPropagation()}>
                     {!r.fully_paid && (
                       <button onClick={() => navigate(`/orders/${r.order_id}`)} className="btn-primary py-1 px-3 text-sm">
