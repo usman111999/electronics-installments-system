@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { COMPANY_NAME, LOGO_URL } from '../branding';
@@ -11,7 +10,6 @@ import Avatar from '../components/Avatar';
 import OutstandingReportPrint from '../components/OutstandingReportPrint';
 import { summarizeOrders, rs } from '../utils/installmentSummary';
 
-dayjs.extend(relativeTime);
 
 // "Due this month" is the default: from the 1st of every month it lists every
 // customer with an unpaid installment (this month's plus any arrears). A
@@ -23,23 +21,15 @@ const FILTER_CHIPS = [
   { value: 'paid',    label: 'Fully Paid' },
 ];
 
-const WORST_PILL = {
-  overdue: 'badge-red',
-  partial: 'badge-blue',
-  pending: 'badge-yellow',
-  paid:    'badge-green',
-};
-
 const UNASSIGNED = '__unassigned__';
 const digits = (s) => String(s || '').replace(/\D/g, '');
 const fmtDate = (v) => (v ? dayjs(v).format('DD MMM YYYY') : '—');
 
+// Just Paid / Unpaid: "Unpaid" when anything is still owed up to the end of
+// this month (this month's installment or older arrears), otherwise "Paid".
 function statusLabel(r) {
-  if (r.fully_paid) return ['Fully Paid', 'badge-green'];
-  if (r.worst_status === 'overdue') return ['Overdue', WORST_PILL.overdue];
-  if (r.worst_status === 'partial') return ['Partial', WORST_PILL.partial];
-  if (r.worst_status === 'pending') return ['Pending', WORST_PILL.pending];
-  return ['Up to date', 'badge-green'];
+  if (r.order_status === 'cancelled') return ['Cancelled', 'badge-gray'];
+  return r.is_due ? ['Unpaid', 'badge-red'] : ['Paid', 'badge-green'];
 }
 
 export default function Installments() {
@@ -231,17 +221,13 @@ export default function Installments() {
               <th>Remaining</th>
               <th>Due now</th>
               <th>Last Paid</th>
-              <th>Next Due</th>
               <th>Status</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan="12" className="text-center text-slate-400 py-8">Loading…</td></tr>}
+            {loading && <tr><td colSpan="11" className="text-center text-slate-400 py-8">Loading…</td></tr>}
             {!loading && filtered.map(r => {
-              const overdueDays = r.next_due_date && r.overdue_count > 0
-                ? dayjs().diff(dayjs(r.next_due_date), 'day')
-                : 0;
               const [label, pill] = statusLabel(r);
               return (
                 <tr key={r.order_id} className="cursor-pointer"
@@ -270,15 +256,6 @@ export default function Installments() {
                     {r.due_now > 0 ? rs(r.due_now) : '—'}
                   </td>
                   <td className="text-sm whitespace-nowrap">{fmtDate(r.last_paid_date)}</td>
-                  <td className="text-sm whitespace-nowrap">
-                    {r.next_due_date ? (
-                      <>
-                        <div className="text-slate-900">{fmtDate(r.next_due_date)}</div>
-                        {overdueDays > 0 && <div className="text-xs text-red-600">{overdueDays}d overdue</div>}
-                        {overdueDays <= 0 && <div className="text-xs text-slate-500">{dayjs(r.next_due_date).fromNow()}</div>}
-                      </>
-                    ) : <span className="text-slate-400">—</span>}
-                  </td>
                   <td><span className={pill}>{label}</span></td>
                   <td onClick={e => e.stopPropagation()}>
                     {!r.fully_paid && (
@@ -291,7 +268,7 @@ export default function Installments() {
               );
             })}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan="12" className="text-center text-slate-400 py-10">
+              <tr><td colSpan="11" className="text-center text-slate-400 py-10">
                 {rows.length === 0
                   ? 'No installments yet. Create an order for a customer to start their plan — invoices then open one month at a time.'
                   : filterChip === 'due' && !search
