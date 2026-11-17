@@ -70,7 +70,7 @@ export default function CustomerPrintForm({ customer }) {
         {/* ---- Letterhead ---- */}
         <div className="flex items-center justify-between pb-2 mb-3" style={{ borderBottom: '3px solid #1e3a5f' }}>
           <div className="flex items-center gap-2">
-            <img src={LOGO_URL} alt={COMPANY_NAME} style={{ height: '40px', width: 'auto', background: '#000', padding: '3px', borderRadius: '4px' }} />
+            <img src={LOGO_URL} alt={COMPANY_NAME} style={{ height: '44px', width: '44px', objectFit: 'contain' }} />
             <div>
               <div className="font-bold" style={{ fontSize: '18px', letterSpacing: '0.5px', color: '#111827', lineHeight: 1.1 }}>{COMPANY_NAME}</div>
               <div style={{ fontSize: '9px', color: '#64748b', letterSpacing: '0.4px' }}>Customer Account Information Detail</div>

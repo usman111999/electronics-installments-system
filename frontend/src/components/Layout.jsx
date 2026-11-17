@@ -119,7 +119,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   // Each company sees its OWN name + logo; super_admin (no company) and any
-  // company without a logo fall back to the global Ansaf branding.
+  // company without a logo fall back to the global branding (branding.js).
   const brandName = company?.name || COMPANY_NAME;
   const brandLogo = company?.logo_url || LOGO_URL;
   // Mobile slide-in sidebar state. Closed by default on small screens; the
@@ -169,7 +169,7 @@ export default function Layout() {
       >
         <div className="px-4 py-4 border-b border-slate-800 flex items-center justify-between">
           <Link to="/" className="block min-w-0 flex-1">
-            <div className="h-12 w-full overflow-hidden rounded-lg bg-black flex items-center justify-center">
+            <div className="h-12 w-full overflow-hidden rounded-lg flex items-center justify-center">
               <img src={brandLogo} alt={brandName} className="h-full w-auto object-contain" />
             </div>
             <div className="text-[11px] text-slate-400 capitalize truncate mt-1.5 text-center">{user?.role?.replace('_', ' ')} portal</div>
@@ -240,7 +240,7 @@ export default function Layout() {
             </svg>
           </button>
           <div className="ml-3 flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-md bg-black overflow-hidden flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center shrink-0">
               <img src={brandLogo} alt={brandName} className="h-full w-auto object-contain" />
             </div>
             <div className="font-semibold text-slate-900 truncate">{brandName}</div>

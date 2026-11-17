@@ -48,6 +48,22 @@ router.get('/', async (req, res) => {
   res.json(data);
 });
 
+// Recovery-officer names already used in the caller's company/branch, offered as
+// suggestions on the order forms so one officer isn't typed three different
+// ways (which would split them across groups in the outstanding report).
+router.get('/officers', async (req, res) => {
+  if (req.user.role === 'customer') return res.status(403).json({ error: 'Forbidden' });
+  let q = supabaseAdmin.from('orders').select('recovery_officer').not('recovery_officer', 'is', null);
+  const cScope = scopeCompany(req);
+  if (cScope) q = q.eq('company_id', cScope);
+  const scope = scopeBranch(req);
+  if (scope) q = q.eq('branch_id', scope);
+  const { data, error } = await q;
+  if (error) return res.status(500).json({ error: error.message });
+  const names = [...new Set((data || []).map(r => (r.recovery_officer || '').trim()).filter(Boolean))];
+  res.json(names.sort((a, b) => a.localeCompare(b)));
+});
+
 router.get('/:id', async (req, res) => {
   // Authorize BEFORE any side-effect: a quick header fetch + branch/owner check
   // so an unauthorized caller can never trigger invoice creation on an order.

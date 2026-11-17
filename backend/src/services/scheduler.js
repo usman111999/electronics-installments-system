@@ -2,19 +2,48 @@ const cron = require('node-cron');
 const dayjs = require('dayjs');
 const { supabaseAdmin } = require('../config/supabase');
 const { sendWhatsApp } = require('./whatsapp');
-const { ensureDueInvoices } = require('./installmentEngine');
+const { ensureDueInvoices, businessToday } = require('./installmentEngine');
 
 // Create each month's invoice for every active order once its due-month begins.
 // Idempotent — safe to run daily; only inserts invoices that don't exist yet.
+// Orders are processed a few at a time so a catch-up run stays quick.
 async function runAccrualJob() {
   const { data: orders } = await supabaseAdmin.from('orders').select('id').eq('status', 'active');
+  const queue = [...(orders || [])];
   let created = 0;
-  for (const o of orders || []) {
-    try { created += await ensureDueInvoices(o.id); }
-    catch (e) { console.error('[accrual] order', o.id, e.message); }
-  }
+  const worker = async () => {
+    for (let o = queue.shift(); o; o = queue.shift()) {
+      try { const n = await ensureDueInvoices(o.id); created += n; }
+      catch (e) { console.error('[accrual] order', o.id, e.message); }
+    }
+  };
+  await Promise.all(Array.from({ length: 5 }, worker));
   console.log(`[scheduler] accrual created ${created} invoice(s)`);
   return created;
+}
+
+// The host can be asleep at 00:05/00:10 (Render free tier sleeps when idle), in
+// which case the nightly cron never fires and a new month's invoices never
+// appear. catchUpDaily() runs the two billing jobs — invoice accrual and overdue
+// marking — at most once per business day: on startup (the host just woke up)
+// and from the installments list. Both jobs are idempotent. The auto-lock and
+// WhatsApp jobs are deliberately NOT part of the catch-up.
+let catchUpDay = null;
+let catchUpRun = null;
+function catchUpDaily() {
+  const day = businessToday();
+  if (catchUpDay === day && catchUpRun) return catchUpRun;
+  catchUpDay = day;
+  catchUpRun = (async () => {
+    try {
+      await runAccrualJob();
+      await runOverdueMarker();
+    } catch (e) {
+      catchUpDay = null; // let the next call retry
+      console.error('[scheduler] daily catch-up failed:', e.message);
+    }
+  })();
+  return catchUpRun;
 }
 
 function buildReminderMessage({ customerName, amount, dueDate, accountNo }) {
@@ -184,7 +213,7 @@ Please pay today to avoid lock.
 }
 
 async function runOverdueMarker() {
-  const today = dayjs().format('YYYY-MM-DD');
+  const today = businessToday();
   const { data } = await supabaseAdmin
     .from('installments')
     .update({ status: 'overdue' })
@@ -234,10 +263,15 @@ function startScheduler() {
   }, opts);
 
   console.log(`[scheduler] cron jobs registered (timezone: ${tz})`);
+
+  // The host may have slept through tonight's 00:05/00:10 runs — catch up now.
+  catchUpDaily();
 }
 
 module.exports = {
   startScheduler,
+  catchUpDaily,
+  runAccrualJob,
   runReminderJob,
   runOverdueMarker,
   runAutoLockJob,

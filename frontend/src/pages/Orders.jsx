@@ -6,6 +6,7 @@ import PageHeader from '../components/PageHeader';
 import Modal from '../components/Modal';
 import Avatar from '../components/Avatar';
 import { useAuth } from '../context/AuthContext';
+import RecoveryOfficerInput from '../components/RecoveryOfficerInput';
 
 const fmt = (n) => `Rs. ${Number(n || 0).toLocaleString()}`;
 
@@ -160,6 +161,7 @@ export default function Orders() {
               Only the <b>first month's invoice</b> opens now. After you collect a payment, use <b>“Generate next invoice”</b> on the order page to bill the next month.
             </div>
             <div><label className="label">Sales Officer</label><input className="input" value={form.sales_officer || ''} onChange={e => setForm(f => ({ ...f, sales_officer: e.target.value }))}/></div>
+            <div><label className="label">Recovery Officer</label><RecoveryOfficerInput value={form.recovery_officer} onChange={v => setForm(f => ({ ...f, recovery_officer: v }))} /></div>
             {(user?.role === 'admin' || user?.role === 'super_admin') && (
               <div className="col-span-2"><label className="label">Branch *</label>
                 <select required className="input" value={form.branch_id || ''} onChange={e => setForm(f => ({ ...f, branch_id: e.target.value }))}>

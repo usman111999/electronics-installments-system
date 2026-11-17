@@ -5,6 +5,7 @@ import Modal from './Modal';
 import ImageUpload from './ImageUpload';
 import ProductPicker from './ProductPicker';
 import AutoTextarea from './AutoTextarea';
+import RecoveryOfficerInput, { CategorySelect } from './RecoveryOfficerInput';
 
 const blankGuarantor = () => ({ name: '', father_name: '', cnic: '', home_address: '', official_address: '', phone_1: '', phone_2: '', occupation: '', relation: '' });
 
@@ -185,6 +186,7 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
             <div><label className="label">Phone 2</label><input className="input" placeholder="e.g. 0321-7654321" value={form.phone_2 || ''} onChange={e => setC('phone_2', e.target.value)} /></div>
             <div><label className="label">Occupation</label><input className="input" placeholder="e.g. Shopkeeper" value={form.occupation || ''} onChange={e => setC('occupation', e.target.value)} /></div>
             <div><label className="label">Monthly Income</label><input type="number" className="input" placeholder="e.g. 60000" value={form.monthly_income || ''} onChange={e => setC('monthly_income', e.target.value)} /></div>
+            <div><label className="label">Category</label><CategorySelect value={form.employee_status} onChange={v => setC('employee_status', v)} /></div>
             {isAdmin && (
               <div><label className="label">Branch *</label>
                 <select required className="input" value={form.branch_id || ''} onChange={e => setC('branch_id', e.target.value)}>
@@ -244,6 +246,7 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
               <div><label className="label">Monthly Installment (Rs.) <span className="font-normal text-slate-400">· auto</span></label><input type="number" step="0.01" className="input" placeholder="auto-calculated" value={order.installment_amount || ''} onChange={e => setO('installment_amount', e.target.value)} /></div>
               <div><label className="label">Total Months</label><input type="number" min="1" className="input" placeholder="any number — e.g. 4, 6, 12, 18" value={order.total_installments || ''} onChange={e => setO('total_installments', e.target.value)} /></div>
               <div><label className="label">Sales Officer</label><input className="input" value={order.sales_officer || ''} onChange={e => setO('sales_officer', e.target.value)} /></div>
+              <div><label className="label">Recovery Officer</label><RecoveryOfficerInput value={order.recovery_officer} onChange={v => setO('recovery_officer', v)} /></div>
             </div>
           </div>
         )}
@@ -284,6 +287,7 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
               <Row k="Phone 2" v={form.phone_2} />
               <Row k="Occupation" v={form.occupation} />
               <Row k="Monthly Income" v={form.monthly_income ? fmt(form.monthly_income) : ''} />
+              <Row k="Category" v={form.employee_status} />
               {isAdmin && <Row k="Branch" v={branchName} />}
               <Row k="Home Address" v={form.home_address} />
               <Row k="Official Address" v={form.official_address} />
@@ -303,6 +307,7 @@ export default function CustomerWizard({ open, onClose, editing, branches, isAdm
                     <Row k="Discount" v={fmt(order.discount)} />
                     <Row k="Plan" v={`${order.total_installments} × ${fmt(order.installment_amount)} (due day ${order.due_day})`} />
                     <Row k="Sales Officer" v={order.sales_officer} />
+                    <Row k="Recovery Officer" v={order.recovery_officer} />
                   </>
                 ) : (
                   <div className="text-slate-400">No order — customer will be registered without a product.</div>

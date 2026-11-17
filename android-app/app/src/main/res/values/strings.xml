@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">EIS Device Lock</string>
+    <string name="app_name">Rana Electronics</string>
 
     <!-- Enrollment -->
     <string name="enroll_in_progress">Enrolling device…</string>
@@ -34,7 +34,7 @@
     <string name="notif_channel_lock">Device Lock</string>
     <string name="notif_channel_lock_desc">Used to keep the lock screen active.</string>
     <string name="notif_lock_title">Device locked</string>
-    <string name="notif_lock_text">Your device has been locked by EIS.</string>
+    <string name="notif_lock_text">Your device has been locked by Rana Electronics.</string>
     <string name="notif_channel_status">Device Status</string>
     <string name="notif_channel_status_desc">Background device check-in.</string>
 </resources>

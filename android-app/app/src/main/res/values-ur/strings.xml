@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ای آئی ایس ڈیوائس لاک</string>
+    <string name="app_name">رانا الیکٹرانکس</string>
 
     <string name="enroll_in_progress">ڈیوائس رجسٹر ہو رہی ہے…</string>
     <string name="enroll_success">ڈیوائس کامیابی سے رجسٹر ہو گئی</string>
@@ -29,7 +29,7 @@
     <string name="notif_channel_lock">ڈیوائس لاک</string>
     <string name="notif_channel_lock_desc">لاک اسکرین فعال رکھنے کے لیے۔</string>
     <string name="notif_lock_title">ڈیوائس لاک ہے</string>
-    <string name="notif_lock_text">آپ کی ڈیوائس ای آئی ایس نے لاک کر دی ہے۔</string>
+    <string name="notif_lock_text">آپ کی ڈیوائس رانا الیکٹرانکس نے لاک کر دی ہے۔</string>
     <string name="notif_channel_status">ڈیوائس اسٹیٹس</string>
     <string name="notif_channel_status_desc">پس منظر میں ڈیوائس چیک ان۔</string>
 </resources>

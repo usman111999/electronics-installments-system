@@ -6,6 +6,14 @@
 const dayjs = require('dayjs');
 const { supabaseAdmin } = require('../config/supabase');
 
+// "Today" as a YYYY-MM-DD string in the business timezone (Pakistan by
+// default). The host runs in UTC, so using the server clock would only open a
+// new month's invoices at 05:00 PKT on the 1st.
+function businessToday() {
+  const tz = process.env.SCHEDULER_TZ || 'Asia/Karachi';
+  return new Date().toLocaleDateString('en-CA', { timeZone: tz });
+}
+
 function clampDueDate(base, monthsAhead, requestedDay) {
   const target = base.add(monthsAhead, 'month').date(1);
   const lastDay = target.daysInMonth();
@@ -84,7 +92,7 @@ async function ensureDueInvoices(orderId, opts = {}) {
 
   let billed = list.reduce((s, i) => s + Number(i.amount_due || 0), 0);
   let lastNo = list.reduce((m, i) => Math.max(m, i.installment_no || 0), 0);
-  const today = opts.asOf ? dayjs(opts.asOf) : dayjs();
+  const today = dayjs(opts.asOf || businessToday());
 
   let created = 0;
   for (let k = lastNo + 1; k <= N; k++) {
@@ -175,6 +183,7 @@ async function applyAdvance(orderId, months, amount, userId) {
 }
 
 module.exports = {
+  businessToday,
   clampDueDate,
   genReceiptNo,
   financedTotal,

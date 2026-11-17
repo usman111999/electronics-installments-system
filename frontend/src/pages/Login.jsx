@@ -34,7 +34,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-brand-50 via-white to-slate-100">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <img src={LOGO_URL} alt={COMPANY_NAME} className="mx-auto h-20 w-auto mb-4 rounded-xl bg-black/90 p-3 object-contain" />
+          <img src={LOGO_URL} alt={COMPANY_NAME} className="mx-auto h-24 w-24 mb-4 rounded-full object-contain shadow-md" />
           <h1 className="text-2xl font-bold text-slate-900">{COMPANY_NAME}</h1>
           <p className="text-sm text-slate-500 mt-1">Sign in to access your portal</p>
         </div>

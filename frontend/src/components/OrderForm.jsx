@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { api } from '../api/client';
 import ProductPicker from './ProductPicker';
+import RecoveryOfficerInput from './RecoveryOfficerInput';
 
 const emptyOrder = () => ({ order_date: dayjs().format('YYYY-MM-DD'), due_day: 5 });
 
@@ -91,6 +92,7 @@ export default function OrderForm({ customerId, branchId, onCreated, onCancel })
         <div><label className="label">Total Months *</label><input type="number" min="1" required className="input" placeholder="any number — e.g. 4, 6, 12" value={order.total_installments || ''} onChange={e => setO('total_installments', e.target.value)} /></div>
         <div><label className="label">Monthly Installment (Rs.) * <span className="font-normal text-slate-400">· auto</span></label><input type="number" step="0.01" required className="input" placeholder="auto-calculated" value={order.installment_amount || ''} onChange={e => setO('installment_amount', e.target.value)} /></div>
         <div><label className="label">Sales Officer</label><input className="input" value={order.sales_officer || ''} onChange={e => setO('sales_officer', e.target.value)} /></div>
+        <div><label className="label">Recovery Officer</label><RecoveryOfficerInput value={order.recovery_officer} onChange={v => setO('recovery_officer', v)} /></div>
       </div>
       <div className="text-xs text-blue-900 bg-blue-50 border border-blue-100 rounded px-3 py-2">
         Only the first month's invoice opens now; generate the next one from the order page when you collect a payment.

@@ -6,6 +6,8 @@ import PageHeader from '../components/PageHeader';
 import Modal from '../components/Modal';
 import DeviceCard from '../components/DeviceCard';
 import Avatar from '../components/Avatar';
+import RecoveryOfficerInput from '../components/RecoveryOfficerInput';
+import { useAuth } from '../context/AuthContext';
 
 const fmt = (n) => `Rs. ${Number(n || 0).toLocaleString()}`;
 const statusClass = {
@@ -17,7 +19,12 @@ const statusClass = {
 
 export default function OrderDetail() {
   const { id } = useParams();
+  const { hasPermission } = useAuth();
   const [order, setOrder] = useState(null);
+  const [officerEdit, setOfficerEdit] = useState(false);
+  const [officerVal, setOfficerVal] = useState('');
+  const [officerSaving, setOfficerSaving] = useState(false);
+  const [officerErr, setOfficerErr] = useState('');
   const [payOpen, setPayOpen] = useState(false);
   const [selected, setSelected] = useState(null);
   const [pay, setPay] = useState({});
@@ -160,6 +167,21 @@ export default function OrderDetail() {
   const remaining = Math.max(0, financed - instCollected);  // real balance left over the whole plan
   const paidCount = allInstallments.filter(i => i.status === 'paid').length;
   const monthsLeft = Math.max(0, Number(order.total_installments || 0) - paidCount);
+  // Most recent payment received (date + amount of that invoice).
+  const lastPaid = allInstallments
+    .filter(i => Number(i.amount_paid || 0) > 0 && i.payment_date)
+    .sort((a, b) => String(b.payment_date).localeCompare(String(a.payment_date)) || b.installment_no - a.installment_no)[0];
+  const canEditOrder = hasPermission?.('orders.update');
+
+  const saveOfficer = async () => {
+    setOfficerErr(''); setOfficerSaving(true);
+    try {
+      await api.patch(`/orders/${id}`, { recovery_officer: officerVal.trim() || null });
+      setOfficerEdit(false);
+      await load();
+    } catch (e) { setOfficerErr(e?.response?.data?.error || 'Could not save the recovery officer'); }
+    finally { setOfficerSaving(false); }
+  };
   // Next invoice is generated on demand — only when nothing is unpaid, more
   // months remain, and there's still a balance to bill.
   const hasUnpaid = allInstallments.some(i => i.status !== 'paid');
@@ -183,7 +205,8 @@ export default function OrderDetail() {
       <div className="flex items-center gap-3">
         <Avatar src={order.customers?.picture_url} name={order.customers?.customer_name} size={48} />
         <div className="flex-1">
-          <PageHeader title={`Order ${order.order_no}`} subtitle={`${order.customers?.customer_name} · ${order.product_name_snapshot || ''}`}
+          <PageHeader title={`Order ${order.order_no}`}
+            subtitle={[order.customers?.customer_name, order.customers?.phone_1 && `📞 ${order.customers.phone_1}`, order.product_name_snapshot].filter(Boolean).join(' · ')}
             actions={<Link to="/orders" className="btn-secondary">← Back</Link>} />
         </div>
       </div>
@@ -192,11 +215,46 @@ export default function OrderDetail() {
         <div className="card"><div className="text-xs uppercase text-slate-500">Total Price</div><div className="text-2xl font-bold">{fmt(order.total_price)}</div>{discount > 0 && <div className="text-xs text-slate-400">less discount {fmt(discount)}</div>}</div>
         <div className="card"><div className="text-xs uppercase text-slate-500">Advance Paid</div><div className="text-2xl font-bold text-emerald-600">{fmt(advance)}</div><div className="text-xs text-slate-400">received upfront</div></div>
         <div className="card"><div className="text-xs uppercase text-slate-500">Collected</div><div className="text-2xl font-bold text-emerald-600">{fmt(totalReceived)}</div><div className="text-xs text-slate-400">advance + {paidCount} installment{paidCount === 1 ? '' : 's'}</div></div>
-        <div className="card"><div className="text-xs uppercase text-slate-500">Remaining</div><div className="text-2xl font-bold text-amber-600">{fmt(remaining)}</div><div className="text-xs text-slate-400">{monthsLeft} of {order.total_installments} months left</div></div>
+        <div className="card"><div className="text-xs uppercase text-slate-500">Remaining Balance</div><div className="text-2xl font-bold text-amber-600">{fmt(remaining)}</div><div className="text-xs text-slate-400">{monthsLeft} of {order.total_installments} months left</div></div>
       </div>
 
-      <div className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 mb-6">
-        Advance <b>{fmt(advance)}</b> received{discount > 0 ? <> · discount <b>{fmt(discount)}</b></> : null} · <b>{fmt(financed)}</b> financed over <b>{order.total_installments}</b> months · <b>{fmt(remaining)}</b> still to collect.
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-3">
+        <div className="card"><div className="text-xs uppercase text-slate-500">Total Installments</div><div className="text-2xl font-bold">{order.total_installments}</div></div>
+        <div className="card"><div className="text-xs uppercase text-slate-500">Paid</div><div className="text-2xl font-bold text-emerald-600">{paidCount}</div></div>
+        <div className="card"><div className="text-xs uppercase text-slate-500">Unpaid</div><div className="text-2xl font-bold text-amber-600">{monthsLeft}</div></div>
+        <div className="card"><div className="text-xs uppercase text-slate-500">Monthly Installment</div><div className="text-2xl font-bold">{fmt(order.installment_amount)}</div><div className="text-xs text-slate-400">due day {order.due_day || 5} of each month</div></div>
+        <div className="card"><div className="text-xs uppercase text-slate-500">Last Payment</div>
+          {lastPaid
+            ? <><div className="text-2xl font-bold">{dayjs(lastPaid.payment_date).format('DD MMM YYYY')}</div><div className="text-xs text-slate-400">{fmt(lastPaid.amount_paid)} · installment #{lastPaid.installment_no}</div></>
+            : <div className="text-2xl font-bold text-slate-400">—</div>}
+        </div>
+      </div>
+
+      <div className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 mb-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div>
+          Advance <b>{fmt(advance)}</b> received{discount > 0 ? <> · discount <b>{fmt(discount)}</b></> : null} · <b>{fmt(financed)}</b> financed over <b>{order.total_installments}</b> months · <b>{fmt(remaining)}</b> still to collect.
+        </div>
+        <div className="flex items-center gap-2">
+          <span>Recovery officer:</span>
+          {officerEdit ? (
+            <>
+              <div className="w-56"><RecoveryOfficerInput value={officerVal} onChange={setOfficerVal} className="input py-1" /></div>
+              <button type="button" onClick={saveOfficer} disabled={officerSaving} className="btn-primary py-1 px-3 text-sm">{officerSaving ? 'Saving…' : 'Save'}</button>
+              <button type="button" onClick={() => setOfficerEdit(false)} className="btn-secondary py-1 px-3 text-sm">Cancel</button>
+            </>
+          ) : (
+            <>
+              <b>{order.recovery_officer || 'Not assigned'}</b>
+              {canEditOrder && (
+                <button type="button" className="text-brand-600 hover:underline"
+                  onClick={() => { setOfficerVal(order.recovery_officer || ''); setOfficerErr(''); setOfficerEdit(true); }}>
+                  {order.recovery_officer ? 'Change' : 'Assign'}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        {officerErr && <div className="basis-full text-red-700">{officerErr}</div>}
       </div>
 
       <DeviceCard order={order} onChanged={load} />
@@ -237,7 +295,7 @@ export default function OrderDetail() {
 
       <div className="card overflow-x-auto p-0">
         <table className="table-base">
-          <thead><tr><th>#</th><th>Due</th><th>Pre-Bal</th><th>Amount</th><th>Paid</th><th>Disc</th><th>Fine</th><th>Balance</th><th>Receipt</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>Due</th><th>Pre-Bal</th><th>Amount</th><th>Paid</th><th>Paid On</th><th>Disc</th><th>Fine</th><th>Balance</th><th>Receipt</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {visibleInstallments.map(i => (
               <tr key={i.id}>
@@ -246,6 +304,7 @@ export default function OrderDetail() {
                 <td>{fmt(i.pre_balance)}</td>
                 <td>{fmt(i.amount_due)}</td>
                 <td>{fmt(i.amount_paid)}</td>
+                <td className="whitespace-nowrap">{Number(i.amount_paid || 0) > 0 && i.payment_date ? dayjs(i.payment_date).format('DD MMM YYYY') : '—'}</td>
                 <td>{fmt(i.discount)}</td>
                 <td>{fmt(i.fine)}</td>
                 <td>{fmt(i.balance)}</td>
@@ -261,7 +320,7 @@ export default function OrderDetail() {
               </tr>
             ))}
             {visibleInstallments.length === 0 && (
-              <tr><td colSpan="11" className="text-center text-slate-400 py-8">No {instFilter !== 'all' ? instFilter : ''} installments</td></tr>
+              <tr><td colSpan="12" className="text-center text-slate-400 py-8">No {instFilter !== 'all' ? instFilter : ''} installments</td></tr>
             )}
           </tbody>
         </table>

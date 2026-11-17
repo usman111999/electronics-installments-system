@@ -5,6 +5,7 @@ const { authenticate, requirePermission, scopeBranch, scopeCompany } = require('
 const { logActivity } = require('../services/activityLog');
 const { issueCommand } = require('../services/deviceCommands');
 const { ensureDueInvoices, applyAdvance, recomputeOrderStatus, buildNextRow } = require('../services/installmentEngine');
+const { catchUpDaily } = require('../services/scheduler');
 
 const router = express.Router();
 router.use(authenticate);
@@ -21,9 +22,17 @@ function clampDueDate(base, monthsAhead, requestedDay) {
 }
 
 router.get('/', async (req, res) => {
+  // Make sure this month's invoices exist (and overdue flags are current) even
+  // if the nightly cron was missed while the host slept. Runs at most once per
+  // day; a customer's read never triggers it, and the list never waits on it
+  // for more than a few seconds.
+  if (req.user.role !== 'customer') {
+    await Promise.race([catchUpDaily(), new Promise(r => setTimeout(r, 8000))]);
+  }
+
   let q = supabaseAdmin
     .from('installments')
-    .select('*, orders!inner(id, order_no, branch_id, company_id, customer_id, total_installments, branches(name), customers(id, customer_name, account_no, phone_1, picture_url))')
+    .select('*, orders!inner(id, order_no, order_date, status, branch_id, company_id, customer_id, total_installments, total_price, advance_payment, discount, installment_amount, recovery_officer, branches(name), customers(id, customer_name, account_no, phone_1, picture_url, employee_status))')
     .order('due_date', { ascending: true });
 
   if (req.user.role === 'customer') {
